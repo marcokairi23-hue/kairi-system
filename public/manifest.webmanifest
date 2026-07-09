@@ -1,0 +1,11 @@
+{
+  "name": "קאירי — מערכת ניהול",
+  "short_name": "קאירי",
+  "start_url": "/",
+  "display": "standalone",
+  "dir": "rtl",
+  "lang": "he",
+  "background_color": "#F7F6F3",
+  "theme_color": "#1F6E6B",
+  "icons": []
+}
