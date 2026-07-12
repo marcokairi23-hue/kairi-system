@@ -5,6 +5,10 @@ import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import FabricsList from './pages/fabrics/FabricsList'
 import FabricForm from './pages/fabrics/FabricForm'
+import OrdersList from './pages/orders/OrdersList'
+import NewOrder from './pages/orders/NewOrder'
+import OrderDetail from './pages/orders/OrderDetail'
+import EditOrder from './pages/orders/EditOrder'
 
 export default function App() {
   const { session, loading } = useAuth()
@@ -26,6 +30,10 @@ export default function App() {
         <Route path="/fabrics" element={<FabricsList />} />
         <Route path="/fabrics/new" element={<FabricForm />} />
         <Route path="/fabrics/:id" element={<FabricForm />} />
+        <Route path="/orders" element={<OrdersList />} />
+        <Route path="/orders/new" element={<NewOrder />} />
+        <Route path="/orders/:id" element={<OrderDetail />} />
+        <Route path="/orders/:id/edit" element={<EditOrder />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>
