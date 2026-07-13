@@ -1,6 +1,4 @@
 import { useNavigate } from 'react-router-dom'
-import { supabase } from '../../lib/supabase'
-import { useAuth } from '../../lib/auth'
 import { printOrder, buildFormFromOrder } from './printOrder'
 import { ORDER_STATUS_NEXT, ORDER_STATUS_LABELS, SHADING_LABELS, fmt } from '../../lib/statusHelpers'
 
@@ -47,14 +45,13 @@ interface Props {
   compact?: boolean
   onPayment: () => void
   onItemStatus: () => void
-  onRefresh: () => void
+  onAdvance: () => void
 }
 
 export default function OrderActions({
-  order, compact = false, onPayment, onItemStatus, onRefresh,
+  order, compact = false, onPayment, onItemStatus, onAdvance,
 }: Props) {
   const navigate = useNavigate()
-  const { profile } = useAuth()
 
   const orderNum = order.order_number ?? 'טיוטה'
   const paid = (order.payments ?? []).reduce((s, p) => s + p.amount, 0)
@@ -94,38 +91,21 @@ ${paid > 0 ? `שולם: ${fmt(paid)}\nנשאר: ${fmt(remaining)}` : ''}
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, '_blank')
   }
 
-  const doAdvance = async (e: React.MouseEvent) => {
-    stop(e)
-    if (!nextStatus) return
-    await supabase.from('orders').update({ status: nextStatus }).eq('id', order.id)
-    await supabase.from('order_status_history').insert({
-      order_id: order.id,
-      from_status: order.status,
-      to_status: nextStatus,
-      changed_by: profile?.id ?? null,
-      note: 'קידום מהיר מהרשימה',
-    })
-    onRefresh()
-  }
-
   const btn = compact
     ? 'w-8 h-8 grid place-items-center rounded-md hover:bg-slate-100 text-base'
     : 'flex-1 py-1.5 rounded-md hover:bg-slate-100 text-sm flex items-center justify-center gap-1'
 
   return (
     <div className={compact ? 'flex items-center gap-0.5' : 'flex items-center gap-1 border-t pt-2 mt-2'}>
-      <button className={btn} title="הדפס ללקוח"
-              onClick={e => doPrint(e, true)}>
+      <button className={btn} title="הדפס ללקוח" onClick={e => doPrint(e, true)}>
         🖨️{!compact && <span className="text-xs">הדפס</span>}
       </button>
 
-      <button className={btn} title="הוראות עבודה"
-              onClick={e => doPrint(e, false)}>
+      <button className={btn} title="הוראות עבודה" onClick={e => doPrint(e, false)}>
         🔧{!compact && <span className="text-xs">עבודה</span>}
       </button>
 
-      <button className={btn} title="שלח ב-WhatsApp"
-              onClick={doWhatsApp}>
+      <button className={btn} title="שלח ב-WhatsApp" onClick={doWhatsApp}>
         💬{!compact && <span className="text-xs">שלח</span>}
       </button>
 
@@ -147,7 +127,7 @@ ${paid > 0 ? `שולם: ${fmt(paid)}\nנשאר: ${fmt(remaining)}` : ''}
       {nextStatus && (
         <button className={btn}
                 title={`קדם ל: ${ORDER_STATUS_LABELS[nextStatus]}`}
-                onClick={doAdvance}>
+                onClick={e => { stop(e); onAdvance() }}>
           ➡️{!compact && <span className="text-xs">קדם</span>}
         </button>
       )}

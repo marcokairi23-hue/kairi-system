@@ -2,6 +2,10 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { printOrder, buildFormFromOrder } from './printOrder'
+import {
+  ORDER_STATUS_LABELS, ORDER_STATUS_COLORS, ORDER_STATUS_NEXT,
+  ITEM_STATUS_LABELS, ITEM_STATUS_COLORS, SHADING_LABELS, calcProgress,
+} from '../../lib/statusHelpers'
 
 interface OrderItem {
   id: string
@@ -54,27 +58,7 @@ interface Order {
   payments?: Payment[]
 }
 
-const STATUS_FLOW: { value: string; label: string; next?: string }[] = [
-  { value: 'quote',           label: 'הצעת מחיר',    next: 'pending_payment' },
-  { value: 'pending_payment', label: 'ממתין לגבייה', next: 'ready' },
-  { value: 'ready',           label: 'חדש לביצוע',   next: 'in_production' },
-  { value: 'in_production',   label: 'בייצור',        next: 'completed' },
-  { value: 'completed',       label: 'הושלם' },
-  { value: 'cancelled',       label: 'מבוטל' },
-]
 
-const STATUS_COLORS: Record<string, string> = {
-  quote:           'bg-slate-100 text-slate-700',
-  pending_payment: 'bg-amber-100 text-amber-700',
-  ready:           'bg-blue-100 text-blue-700',
-  in_production:   'bg-purple-100 text-purple-700',
-  completed:       'bg-green-100 text-green-700',
-  cancelled:       'bg-red-100 text-red-700',
-}
-
-const SHADING_LABELS: Record<string, string> = {
-  zebra: 'זברה', venetian: 'ונציאני', roman: 'רומי', roller: 'גלילה',
-}
 
 export default function OrderDetail() {
   const { id } = useParams()
@@ -104,8 +88,8 @@ export default function OrderDetail() {
   const curtains = (order.order_items ?? []).filter(i => i.family === 'curtain')
   const shadings = (order.order_items ?? []).filter(i => i.family === 'shading')
 
-  const currentStatus = STATUS_FLOW.find(s => s.value === order.status)
-  const nextStatus = STATUS_FLOW.find(s => s.value === currentStatus?.next)
+  const nextStatus = ORDER_STATUS_NEXT[order.status]
+  const prog = calcProgress(order.order_items ?? [])
 
   const form = buildFormFromOrder(order)
   const orderNum = order.order_number ?? 'טיוטה'
@@ -113,11 +97,11 @@ export default function OrderDetail() {
   const advanceStatus = async () => {
     if (!nextStatus) return
     setUpdatingStatus(true)
-    await supabase.from('orders').update({ status: nextStatus.value }).eq('id', id)
+    await supabase.from('orders').update({ status: nextStatus }).eq('id', id)
     await supabase.from('order_status_history').insert({
       order_id: id,
       from_status: order.status,
-      to_status: nextStatus.value,
+      to_status: nextStatus,
       note: 'עדכון ידני',
     })
     await load()
@@ -157,8 +141,8 @@ export default function OrderDetail() {
           </button>
           <h1 className="text-xl font-bold flex items-center gap-2 flex-wrap">
             הזמנה #{orderNum}
-            <span className={`text-xs px-2 py-1 rounded-full font-medium ${STATUS_COLORS[order.status] ?? 'bg-slate-100'}`}>
-              {currentStatus?.label ?? order.status}
+            <span className={`text-xs px-2 py-1 rounded-full font-medium ${ORDER_STATUS_COLORS[order.status] ?? 'bg-slate-100'}`}>
+              {ORDER_STATUS_LABELS[order.status] ?? order.status}
             </span>
           </h1>
           <div className="text-sm text-slate-500">
@@ -187,12 +171,12 @@ export default function OrderDetail() {
       {order.status !== 'completed' && order.status !== 'cancelled' && (
         <div className="card p-3 mb-3 flex items-center justify-between gap-3">
           <div className="text-sm text-slate-600">
-            סטטוס: <strong>{currentStatus?.label}</strong>
+            סטטוס: <strong>{ORDER_STATUS_LABELS[order.status]}</strong>
           </div>
           <div className="flex gap-2">
             {nextStatus && (
               <button className="btn-primary text-sm py-1.5" disabled={updatingStatus} onClick={advanceStatus}>
-                {updatingStatus ? '...' : `← ${nextStatus.label}`}
+                {updatingStatus ? '...' : `← ${ORDER_STATUS_LABELS[nextStatus]}`}
               </button>
             )}
             <button className="text-xs text-red-400 hover:text-red-600 px-2" onClick={() => setShowCancelConfirm(true)}>
@@ -210,6 +194,29 @@ export default function OrderDetail() {
         {order.address_snapshot && <div className="text-slate-500 text-sm mt-1">{order.address_snapshot}</div>}
       </div>
 
+      {/* פס התקדמות */}
+      {prog.total > 0 && (
+        <div className="card p-4 mb-3">
+          <div className="flex justify-between items-center mb-2">
+            <span className="text-xs font-bold text-slate-500">התקדמות ייצור</span>
+            <span className={`text-sm font-bold ${
+              prog.isComplete ? 'text-green-700'
+              : prog.isPartial ? 'text-amber-700'
+              : 'text-slate-500'
+            }`}>
+              {prog.isPartial && '⚠️ '}{prog.label}
+            </span>
+          </div>
+          <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
+            <div className={`h-full transition-all ${
+              prog.isComplete ? 'bg-green-500'
+              : prog.isPartial ? 'bg-amber-400'
+              : 'bg-slate-300'
+            }`} style={{ width: `${prog.percent}%` }} />
+          </div>
+        </div>
+      )}
+
       {/* וילונות */}
       {curtains.length > 0 && (
         <div className="card mb-3 overflow-hidden">
@@ -217,9 +224,16 @@ export default function OrderDetail() {
           <div className="divide-y">
             {curtains.map((item, i) => (
               <div key={item.id} className="p-3 text-sm">
-                <div className="flex justify-between">
+                <div className="flex justify-between items-start gap-2">
                   <span className="font-semibold">{i + 1}. {item.location}</span>
-                  <span className="font-bold text-brand">₪{item.price.toLocaleString()}</span>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${
+                      ITEM_STATUS_COLORS[item.item_status] ?? 'bg-slate-100'
+                    }`}>
+                      {ITEM_STATUS_LABELS[item.item_status] ?? item.item_status}
+                    </span>
+                    <span className="font-bold text-brand">₪{item.price.toLocaleString()}</span>
+                  </div>
                 </div>
                 <div className="text-slate-500 mt-1 flex flex-wrap gap-x-3 text-xs">
                   <span>רוחב: {item.width_cm} ס״מ</span>
@@ -244,9 +258,18 @@ export default function OrderDetail() {
           <div className="divide-y">
             {shadings.map((item, i) => (
               <div key={item.id} className="p-3 text-sm">
-                <div className="flex justify-between">
-                  <span className="font-semibold">{i + 1}. {SHADING_LABELS[item.subtype ?? ''] ?? item.subtype} — {item.location}</span>
-                  <span className="font-bold text-brand">₪{item.price.toLocaleString()}</span>
+                <div className="flex justify-between items-start gap-2">
+                  <span className="font-semibold">
+                    {i + 1}. {SHADING_LABELS[item.subtype ?? ''] ?? item.subtype} — {item.location}
+                  </span>
+                  <div className="flex items-center gap-2 shrink-0">
+                    <span className={`text-xs px-2 py-0.5 rounded-full ${
+                      ITEM_STATUS_COLORS[item.item_status] ?? 'bg-slate-100'
+                    }`}>
+                      {ITEM_STATUS_LABELS[item.item_status] ?? item.item_status}
+                    </span>
+                    <span className="font-bold text-brand">₪{item.price.toLocaleString()}</span>
+                  </div>
                 </div>
                 <div className="text-slate-500 mt-1 flex flex-wrap gap-x-3 text-xs">
                   <span>רוחב: {item.width_cm} ס״מ</span>

@@ -79,7 +79,7 @@ export const PAYMENT_METHODS = ['מזומן', 'אשראי', 'העברה בנקא
 export const ITEM_STATUSES: { value: ItemStatus; label: string }[] = [
   { value: 'new', label: 'חדש' },
   { value: 'cut', label: 'נגזר' },
-  { value: 'sewing', label: 'בתפירה' },
+  { value: 'sewing', label: 'במתפרה' },
   { value: 'ready', label: 'מוכן' },
   { value: 'installed', label: 'הותקן' },
   { value: 'cancelled', label: 'מבוטל' },

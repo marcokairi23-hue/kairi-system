@@ -7,6 +7,8 @@ import {
   ITEM_STATUS_LABELS, ITEM_STATUS_COLORS, ITEM_STATUS_ORDER, SHADING_LABELS,
 } from '../../lib/statusHelpers'
 import { printWorkOrder } from './printWork'
+import SyncOrderDialog from '../orders/SyncOrderDialog'
+import { suggestOrderStatus } from '../../lib/statusHelpers'
 
 interface Item {
   id: string
@@ -28,6 +30,7 @@ interface Item {
   for_execution: boolean
   item_status: string
   notes: string | null
+  sort_order?: number
   orders?: {
     order_number: number | null
     customer_name_snapshot: string
@@ -53,13 +56,40 @@ export default function ItemsList() {
   const [activeTab, setActiveTab] = useState('all')
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [err, setErr] = useState<string | null>(null)
+  const [syncQueue, setSyncQueue] = useState<Array<{
+    orderId: string
+    orderNumber: number | null
+    customerName: string
+    orderStatus: string
+    itemStatus: string
+    suggested: string
+    count: number
+  }>>([])
 
   const load = async () => {
-    const { data } = await supabase
+    setLoading(true)
+    const { data, error } = await supabase
       .from('order_items')
       .select('*, orders(order_number, customer_name_snapshot, status, profiles(full_name))')
-      .order('created_at', { ascending: false })
-    setItems((data ?? []) as Item[])
+
+    if (error) {
+      console.error('שגיאה בטעינת פריטים:', error)
+      setErr('לא ניתן לטעון את הפריטים: ' + error.message)
+      setLoading(false)
+      return
+    }
+
+    // מיון: הזמנות חדשות קודם (לפי מספר הזמנה יורד)
+    const sorted = ((data ?? []) as Item[]).sort((a, b) => {
+      const na = a.orders?.order_number ?? 0
+      const nb = b.orders?.order_number ?? 0
+      if (nb !== na) return nb - na
+      return (a.sort_order ?? 0) - (b.sort_order ?? 0)
+    })
+
+    setItems(sorted)
+    setErr(null)
     setLoading(false)
   }
 
@@ -113,9 +143,69 @@ export default function ItemsList() {
 
     if (rows.length) await supabase.from('order_status_history').insert(rows)
 
+    // אילו הזמנות הושפעו?
+    const affectedOrderIds = Array.from(new Set(
+      ids.map(id => items.find(i => i.id === id)?.order_id).filter(Boolean) as string[]
+    ))
+
     setSelected(new Set())
     await load()
+
+    // בדוק לכל הזמנה שהושפעה — האם כל הפריטים באותו סטטוס?
+    const queue: typeof syncQueue = []
+
+    for (const orderId of affectedOrderIds) {
+      const { data } = await supabase
+        .from('orders')
+        .select('id, order_number, customer_name_snapshot, status, order_items(item_status, for_execution)')
+        .eq('id', orderId)
+        .single()
+
+      if (!data) continue
+
+      const activeItems = (data.order_items ?? [])
+        .filter((i: { for_execution: boolean; item_status: string }) =>
+          i.for_execution && i.item_status !== 'cancelled')
+
+      const suggestion = suggestOrderStatus(activeItems, data.status)
+      if (suggestion) {
+        queue.push({
+          orderId: data.id,
+          orderNumber: data.order_number,
+          customerName: data.customer_name_snapshot,
+          orderStatus: data.status,
+          itemStatus: activeItems[0].item_status,
+          suggested: suggestion.suggested,
+          count: activeItems.length,
+        })
+      }
+    }
+
+    if (queue.length) setSyncQueue(queue)
   }
+
+  // אישור קידום הזמנה מהתור
+  const confirmSync = async () => {
+    const current = syncQueue[0]
+    if (!current) return
+
+    await supabase.from('orders')
+      .update({ status: current.suggested })
+      .eq('id', current.orderId)
+
+    await supabase.from('order_status_history').insert({
+      order_id: current.orderId,
+      from_status: current.orderStatus,
+      to_status: current.suggested,
+      changed_by: profile?.id ?? null,
+      note: 'סנכרון אוטומטי — כל הפריטים עודכנו',
+    })
+
+    setSyncQueue(q => q.slice(1))
+    await load()
+  }
+
+  const skipSync = () => setSyncQueue(q => q.slice(1))
 
   const printSelected = () => {
     const chosen = items.filter(i => selected.has(i.id))
@@ -155,6 +245,10 @@ export default function ItemsList() {
           </button>
         ))}
       </div>
+
+      {err && (
+        <div className="card p-4 mb-3 text-red-600 text-sm">{err}</div>
+      )}
 
       {loading && <div className="text-slate-500">טוען פריטים...</div>}
 
@@ -229,6 +323,19 @@ export default function ItemsList() {
         onPrintWork={printSelected}
         onClear={() => setSelected(new Set())}
       />
+
+      {/* דיאלוג: כל הפריטים בהזמנה עודכנו → לקדם את ההזמנה? */}
+      {syncQueue.length > 0 && (
+        <SyncOrderDialog
+          orderNumber={syncQueue[0].orderNumber ?? 'טיוטה'}
+          customerName={syncQueue[0].customerName}
+          itemStatus={syncQueue[0].itemStatus}
+          suggestedOrderStatus={syncQueue[0].suggested}
+          itemCount={syncQueue[0].count}
+          onConfirm={confirmSync}
+          onCancel={skipSync}
+        />
+      )}
     </div>
   )
 }

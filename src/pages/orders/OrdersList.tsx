@@ -1,11 +1,17 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../lib/auth'
 import OrderCardView from './OrderCardView'
 import OrderTableView from './OrderTableView'
 import PaymentModal from './PaymentModal'
 import ItemStatusDialog, { DialogItem } from './ItemStatusDialog'
+import SyncItemsDialog from './SyncItemsDialog'
+import SyncOrderDialog from './SyncOrderDialog'
 import { ActionOrder } from './OrderActions'
+import {
+  ORDER_STATUS_NEXT, ORDER_TO_ITEM_STATUS, suggestOrderStatus,
+} from '../../lib/statusHelpers'
 
 type Order = ActionOrder & { created_at: string }
 type SortKey = 'order_number' | 'customer' | 'created_at' | 'total' | 'status'
@@ -17,12 +23,14 @@ const TABS: { key: string; label: string; statuses: string[] }[] = [
   { key: 'pending',    label: 'ממתין לגבייה', statuses: ['pending_payment'] },
   { key: 'ready',      label: 'חדש לביצוע',   statuses: ['ready'] },
   { key: 'production', label: 'בייצור',        statuses: ['in_production'] },
+  { key: 'installable', label: 'מוכן',         statuses: ['ready_for_install'] },
   { key: 'completed',  label: 'הושלמו',        statuses: ['completed'] },
 ]
 
 const VIEW_KEY = 'kairi_orders_view'
 
 export default function OrdersList() {
+  const { profile } = useAuth()
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('all')
@@ -36,11 +44,28 @@ export default function OrdersList() {
   const [paymentOrder, setPaymentOrder] = useState<ActionOrder | null>(null)
   const [itemsOrder, setItemsOrder] = useState<ActionOrder | null>(null)
 
+  // דיאלוג סנכרון: הזמנה → פריטים
+  const [syncItems, setSyncItems] = useState<{
+    order: ActionOrder
+    newStatus: string
+    itemStatus: string
+    count: number
+  } | null>(null)
+
+  // דיאלוג סנכרון: פריטים → הזמנה
+  const [syncOrder, setSyncOrder] = useState<{
+    order: ActionOrder
+    itemStatus: string
+    suggested: string
+    count: number
+  } | null>(null)
+
   const load = async () => {
-    const { data } = await supabase
+    const { data, error } = await supabase
       .from('orders')
       .select('*, profiles(full_name), order_items(*), payments(*)')
       .order('created_at', { ascending: false })
+    if (error) console.error('שגיאה בטעינת הזמנות:', error)
     setOrders((data ?? []) as Order[])
     setLoading(false)
   }
@@ -55,6 +80,118 @@ export default function OrdersList() {
   const onSort = (key: SortKey) => {
     if (key === sortKey) setSortAsc(!sortAsc)
     else { setSortKey(key); setSortAsc(true) }
+  }
+
+  // ---------- קידום סטטוס הזמנה ----------
+  const handleAdvance = (order: ActionOrder) => {
+    const next = ORDER_STATUS_NEXT[order.status]
+    if (!next) return
+
+    const suggestedItemStatus = ORDER_TO_ITEM_STATUS[next]
+    const activeItems = (order.order_items ?? [])
+      .filter(i => i.for_execution && i.item_status !== 'cancelled')
+
+    // אם יש פריטים ויש סטטוס פריט מוצע — שאל
+    if (suggestedItemStatus && activeItems.length > 0) {
+      setSyncItems({
+        order,
+        newStatus: next,
+        itemStatus: suggestedItemStatus,
+        count: activeItems.length,
+      })
+    } else {
+      // אין פריטים — קדם ישירות
+      advanceOrder(order, next, false, null)
+    }
+  }
+
+  const advanceOrder = async (
+    order: ActionOrder,
+    newStatus: string,
+    syncItemsToo: boolean,
+    itemStatus: string | null
+  ) => {
+    // עדכון ההזמנה
+    await supabase.from('orders').update({ status: newStatus }).eq('id', order.id)
+    await supabase.from('order_status_history').insert({
+      order_id: order.id,
+      from_status: order.status,
+      to_status: newStatus,
+      changed_by: profile?.id ?? null,
+      note: 'קידום מהרשימה',
+    })
+
+    // עדכון הפריטים (אם ביקשו)
+    if (syncItemsToo && itemStatus) {
+      const ids = (order.order_items ?? [])
+        .filter(i => i.for_execution && i.item_status !== 'cancelled')
+        .map(i => i.id)
+
+      if (ids.length) {
+        await supabase.from('order_items')
+          .update({ item_status: itemStatus })
+          .in('id', ids)
+
+        await supabase.from('order_status_history').insert(
+          ids.map(itemId => ({
+            order_id: order.id,
+            order_item_id: itemId,
+            to_status: itemStatus,
+            changed_by: profile?.id ?? null,
+            note: 'סנכרון אוטומטי עם סטטוס ההזמנה',
+          }))
+        )
+      }
+    }
+
+    setSyncItems(null)
+    await load()
+  }
+
+  // ---------- אחרי עדכון פריטים: בדוק אם לקדם הזמנה ----------
+  const afterItemsUpdate = async (orderId: string) => {
+    await load()
+
+    // שלוף מחדש את ההזמנה המעודכנת
+    const { data } = await supabase
+      .from('orders')
+      .select('*, profiles(full_name), order_items(*), payments(*)')
+      .eq('id', orderId)
+      .single()
+
+    if (!data) return
+    const order = data as Order
+
+    const activeItems = (order.order_items ?? [])
+      .filter(i => i.for_execution && i.item_status !== 'cancelled')
+
+    const suggestion = suggestOrderStatus(activeItems, order.status)
+    if (suggestion) {
+      setSyncOrder({
+        order,
+        itemStatus: activeItems[0].item_status,
+        suggested: suggestion.suggested,
+        count: activeItems.length,
+      })
+    }
+  }
+
+  const confirmSyncOrder = async () => {
+    if (!syncOrder) return
+    await supabase.from('orders')
+      .update({ status: syncOrder.suggested })
+      .eq('id', syncOrder.order.id)
+
+    await supabase.from('order_status_history').insert({
+      order_id: syncOrder.order.id,
+      from_status: syncOrder.order.status,
+      to_status: syncOrder.suggested,
+      changed_by: profile?.id ?? null,
+      note: 'סנכרון אוטומטי — כל הפריטים עודכנו',
+    })
+
+    setSyncOrder(null)
+    await load()
   }
 
   const filtered = useMemo(() => {
@@ -151,16 +288,17 @@ export default function OrdersList() {
           <OrderCardView orders={filtered}
                          onPayment={setPaymentOrder}
                          onItemStatus={setItemsOrder}
-                         onRefresh={load} />
+                         onAdvance={handleAdvance} />
         ) : (
           <OrderTableView orders={filtered}
                           sortKey={sortKey} sortAsc={sortAsc} onSort={onSort}
                           onPayment={setPaymentOrder}
                           onItemStatus={setItemsOrder}
-                          onRefresh={load} />
+                          onAdvance={handleAdvance} />
         )
       )}
 
+      {/* מודל תשלום */}
       {paymentOrder && (
         <PaymentModal
           orderId={paymentOrder.id}
@@ -173,6 +311,7 @@ export default function OrdersList() {
         />
       )}
 
+      {/* דיאלוג סטטוס פריטים */}
       {itemsOrder && (
         <ItemStatusDialog
           orderId={itemsOrder.id}
@@ -180,7 +319,35 @@ export default function OrdersList() {
           customerName={itemsOrder.customer_name_snapshot}
           items={(itemsOrder.order_items ?? []) as DialogItem[]}
           onClose={() => setItemsOrder(null)}
-          onSaved={load}
+          onSaved={() => afterItemsUpdate(itemsOrder.id)}
+        />
+      )}
+
+      {/* דיאלוג: הזמנה קודמה → לעדכן פריטים? */}
+      {syncItems && (
+        <SyncItemsDialog
+          orderNumber={syncItems.order.order_number ?? 'טיוטה'}
+          customerName={syncItems.order.customer_name_snapshot}
+          newOrderStatus={syncItems.newStatus}
+          suggestedItemStatus={syncItems.itemStatus}
+          itemCount={syncItems.count}
+          onConfirm={(sync) =>
+            advanceOrder(syncItems.order, syncItems.newStatus, sync, syncItems.itemStatus)
+          }
+          onCancel={() => setSyncItems(null)}
+        />
+      )}
+
+      {/* דיאלוג: כל הפריטים עודכנו → לקדם הזמנה? */}
+      {syncOrder && (
+        <SyncOrderDialog
+          orderNumber={syncOrder.order.order_number ?? 'טיוטה'}
+          customerName={syncOrder.order.customer_name_snapshot}
+          itemStatus={syncOrder.itemStatus}
+          suggestedOrderStatus={syncOrder.suggested}
+          itemCount={syncOrder.count}
+          onConfirm={confirmSyncOrder}
+          onCancel={() => setSyncOrder(null)}
         />
       )}
     </div>

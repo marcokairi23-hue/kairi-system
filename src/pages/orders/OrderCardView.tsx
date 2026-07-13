@@ -8,10 +8,10 @@ interface Props {
   orders: (ActionOrder & { created_at: string })[]
   onPayment: (o: ActionOrder) => void
   onItemStatus: (o: ActionOrder) => void
-  onRefresh: () => void
+  onAdvance: (o: ActionOrder) => void
 }
 
-export default function OrderCardView({ orders, onPayment, onItemStatus, onRefresh }: Props) {
+export default function OrderCardView({ orders, onPayment, onItemStatus, onAdvance }: Props) {
   return (
     <div className="space-y-3">
       {orders.map(o => {
@@ -92,7 +92,7 @@ export default function OrderCardView({ orders, onPayment, onItemStatus, onRefre
             <OrderActions order={o}
                           onPayment={() => onPayment(o)}
                           onItemStatus={() => onItemStatus(o)}
-                          onRefresh={onRefresh} />
+                          onAdvance={() => onAdvance(o)} />
           </div>
         )
       })}

@@ -13,11 +13,11 @@ interface Props {
   onSort: (key: SortKey) => void
   onPayment: (o: ActionOrder) => void
   onItemStatus: (o: ActionOrder) => void
-  onRefresh: () => void
+  onAdvance: (o: ActionOrder) => void
 }
 
 export default function OrderTableView({
-  orders, sortKey, sortAsc, onSort, onPayment, onItemStatus, onRefresh,
+  orders, sortKey, sortAsc, onSort, onPayment, onItemStatus, onAdvance,
 }: Props) {
   const navigate = useNavigate()
 
@@ -111,7 +111,7 @@ export default function OrderTableView({
                   <OrderActions order={o} compact
                                 onPayment={() => onPayment(o)}
                                 onItemStatus={() => onItemStatus(o)}
-                                onRefresh={onRefresh} />
+                                onAdvance={() => onAdvance(o)} />
                 </td>
               </tr>
             )
