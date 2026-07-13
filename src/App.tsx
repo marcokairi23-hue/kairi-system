@@ -9,6 +9,7 @@ import OrdersList from './pages/orders/OrdersList'
 import NewOrder from './pages/orders/NewOrder'
 import OrderDetail from './pages/orders/OrderDetail'
 import EditOrder from './pages/orders/EditOrder'
+import ItemsList from './pages/items/ItemsList'
 
 export default function App() {
   const { session, loading } = useAuth()
@@ -34,6 +35,7 @@ export default function App() {
         <Route path="/orders/new" element={<NewOrder />} />
         <Route path="/orders/:id" element={<OrderDetail />} />
         <Route path="/orders/:id/edit" element={<EditOrder />} />
+        <Route path="/items" element={<ItemsList />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>

@@ -176,9 +176,9 @@ export function printOrder(form: OrderForm, orderNumber: string | number, showPr
 </body>
 </html>`
 
- const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
-const url = URL.createObjectURL(blob)
-window.open(url, '_blank')
+  const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
+  const url = URL.createObjectURL(blob)
+  window.open(url, '_blank')
 }
 
 // בונה OrderForm מנתוני הזמנה קיימת (לשימוש במסך פרטי הזמנה)

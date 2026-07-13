@@ -5,6 +5,7 @@ import { useAuth } from '../lib/auth'
 const navItems = [
   { to: '/', label: 'ראשי', end: true },
   { to: '/orders', label: 'הזמנות' },
+  { to: '/items', label: 'פריטים' },
   { to: '/fabrics', label: 'בדים' },
 ]
 
@@ -15,14 +16,14 @@ export default function Layout({ children }: { children: ReactNode }) {
     <div className="min-h-screen flex flex-col">
       <header className="bg-brand text-white shadow-md sticky top-0 z-20">
         <div className="mx-auto max-w-2xl px-4 h-14 flex items-center justify-between">
-          <div className="flex items-center gap-4">
+          <div className="flex items-center gap-3">
             <span className="font-extrabold text-base tracking-tight">קאירי</span>
-            <nav className="flex items-center gap-1">
+            <nav className="flex items-center gap-0.5">
               {navItems.map((item) => (
                 <NavLink
                   key={item.to} to={item.to} end={item.end}
                   className={({ isActive }) =>
-                    'px-3 py-1.5 rounded-md text-sm font-medium transition-colors ' +
+                    'px-2.5 py-1.5 rounded-md text-sm font-medium transition-colors ' +
                     (isActive ? 'bg-white/20' : 'hover:bg-white/10')
                   }
                 >

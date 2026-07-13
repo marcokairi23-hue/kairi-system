@@ -55,10 +55,10 @@ interface Order {
 }
 
 const STATUS_FLOW: { value: string; label: string; next?: string }[] = [
-  { value: 'quote',           label: 'הצעת מחיר',     next: 'pending_payment' },
-  { value: 'pending_payment', label: 'ממתין לגבייה',  next: 'ready' },
-  { value: 'ready',           label: 'חדש לביצוע',    next: 'in_production' },
-  { value: 'in_production',   label: 'בייצור',         next: 'completed' },
+  { value: 'quote',           label: 'הצעת מחיר',    next: 'pending_payment' },
+  { value: 'pending_payment', label: 'ממתין לגבייה', next: 'ready' },
+  { value: 'ready',           label: 'חדש לביצוע',   next: 'in_production' },
+  { value: 'in_production',   label: 'בייצור',        next: 'completed' },
   { value: 'completed',       label: 'הושלם' },
   { value: 'cancelled',       label: 'מבוטל' },
 ]
@@ -110,7 +110,6 @@ export default function OrderDetail() {
   const form = buildFormFromOrder(order)
   const orderNum = order.order_number ?? 'טיוטה'
 
-  // עדכון סטטוס
   const advanceStatus = async () => {
     if (!nextStatus) return
     setUpdatingStatus(true)
@@ -139,34 +138,21 @@ export default function OrderDetail() {
     setUpdatingStatus(false)
   }
 
-  // WhatsApp
   const sendWhatsApp = () => {
     const phone = order.phone_snapshot.replace(/\D/g, '').replace(/^0/, '972')
     const items = [
       ...curtains.map(i => `• וילון ${i.location} — ${i.width_cm}×${i.heights_cm.join('/')} ס״מ`),
       ...shadings.map(i => `• ${SHADING_LABELS[i.subtype??''] ?? i.subtype} ${i.location} — ${i.width_cm}×${i.heights_cm.join('/')} ס״מ`),
     ].join('\n')
-
-    const text = `שלום ${order.customer_name_snapshot} 😊
-הזמנה מספר #${orderNum} מקאירי וילונות:
-
-${items}
-
-סה״כ לתשלום: ₪${order.final_total.toLocaleString()}
-${paid > 0 ? `שולם: ₪${paid.toLocaleString()}\nנשאר: ₪${remaining.toLocaleString()}` : ''}
-
-תודה! 🙏`
-
+    const text = `שלום ${order.customer_name_snapshot} 😊\nהזמנה מספר #${orderNum} מקאירי וילונות:\n\n${items}\n\nסה״כ לתשלום: ₪${order.final_total.toLocaleString()}\n${paid > 0 ? `שולם: ₪${paid.toLocaleString()}\nנשאר: ₪${remaining.toLocaleString()}` : ''}\n\nתודה! 🙏`
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, '_blank')
   }
 
   return (
     <div className="max-w-2xl mx-auto pb-10">
-      {/* כותרת */}
       <div className="flex items-center justify-between mb-4">
         <div>
-          <button onClick={() => navigate('/orders')}
-                  className="text-sm text-slate-500 hover:text-slate-700 mb-1">
+          <button onClick={() => navigate('/orders')} className="text-sm text-slate-500 hover:text-slate-700 mb-1">
             ← חזרה
           </button>
           <h1 className="text-xl font-bold flex items-center gap-2 flex-wrap">
@@ -181,7 +167,7 @@ ${paid > 0 ? `שולם: ₪${paid.toLocaleString()}\nנשאר: ₪${remaining.to
         </div>
       </div>
 
-      {/* פעולות מהירות */}
+      {/* פעולות */}
       <div className="grid grid-cols-2 gap-2 mb-3">
         <button className="btn-ghost text-sm" onClick={() => printOrder(form, orderNum, true)}>
           🖨️ הדפס ללקוח
@@ -192,8 +178,7 @@ ${paid > 0 ? `שולם: ₪${paid.toLocaleString()}\nנשאר: ₪${remaining.to
         <button className="btn-ghost text-sm" onClick={sendWhatsApp}>
           💬 שלח ב-WhatsApp
         </button>
-        <button className="btn-ghost text-sm"
-                onClick={() => navigate(`/orders/${id}/edit`)}>
+        <button className="btn-ghost text-sm" onClick={() => navigate(`/orders/${id}/edit`)}>
           ✏️ עריכה
         </button>
       </div>
@@ -202,20 +187,15 @@ ${paid > 0 ? `שולם: ₪${paid.toLocaleString()}\nנשאר: ₪${remaining.to
       {order.status !== 'completed' && order.status !== 'cancelled' && (
         <div className="card p-3 mb-3 flex items-center justify-between gap-3">
           <div className="text-sm text-slate-600">
-            סטטוס נוכחי: <strong>{currentStatus?.label}</strong>
+            סטטוס: <strong>{currentStatus?.label}</strong>
           </div>
           <div className="flex gap-2">
             {nextStatus && (
-              <button
-                className="btn-primary text-sm py-1.5"
-                disabled={updatingStatus}
-                onClick={advanceStatus}>
-                {updatingStatus ? '...' : `העבר ל: ${nextStatus.label} ←`}
+              <button className="btn-primary text-sm py-1.5" disabled={updatingStatus} onClick={advanceStatus}>
+                {updatingStatus ? '...' : `← ${nextStatus.label}`}
               </button>
             )}
-            <button
-              className="text-xs text-red-400 hover:text-red-600 px-2"
-              onClick={() => setShowCancelConfirm(true)}>
+            <button className="text-xs text-red-400 hover:text-red-600 px-2" onClick={() => setShowCancelConfirm(true)}>
               ביטול
             </button>
           </div>
@@ -226,32 +206,22 @@ ${paid > 0 ? `שולם: ₪${paid.toLocaleString()}\nנשאר: ₪${remaining.to
       <div className="card p-4 mb-3">
         <div className="text-xs font-bold text-slate-500 mb-2">פרטי לקוח</div>
         <div className="font-bold text-lg">{order.customer_name_snapshot}</div>
-        <a href={`tel:${order.phone_snapshot}`}
-           className="text-brand text-sm font-medium">{order.phone_snapshot}</a>
-        {order.address_snapshot && (
-          <div className="text-slate-500 text-sm mt-1">{order.address_snapshot}</div>
-        )}
+        <a href={`tel:${order.phone_snapshot}`} className="text-brand text-sm font-medium">{order.phone_snapshot}</a>
+        {order.address_snapshot && <div className="text-slate-500 text-sm mt-1">{order.address_snapshot}</div>}
       </div>
 
       {/* וילונות */}
       {curtains.length > 0 && (
         <div className="card mb-3 overflow-hidden">
-          <div className="bg-purple-600 text-white px-4 py-2 text-sm font-bold">
-            וילונות ({curtains.length})
-          </div>
+          <div className="bg-purple-600 text-white px-4 py-2 text-sm font-bold">וילונות ({curtains.length})</div>
           <div className="divide-y">
             {curtains.map((item, i) => (
               <div key={item.id} className="p-3 text-sm">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <span className="font-semibold">{i + 1}. {item.location}</span>
-                    {!item.for_execution && (
-                      <span className="mr-2 text-xs text-slate-400">(לא לביצוע)</span>
-                    )}
-                  </div>
+                <div className="flex justify-between">
+                  <span className="font-semibold">{i + 1}. {item.location}</span>
                   <span className="font-bold text-brand">₪{item.price.toLocaleString()}</span>
                 </div>
-                <div className="text-slate-500 mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs">
+                <div className="text-slate-500 mt-1 flex flex-wrap gap-x-3 text-xs">
                   <span>רוחב: {item.width_cm} ס״מ</span>
                   <span>גובה: {item.heights_cm.join(', ')} ס״מ</span>
                   <span>תפירה: {item.sewing_type}</span>
@@ -260,9 +230,7 @@ ${paid > 0 ? `שולם: ₪${paid.toLocaleString()}\nנשאר: ₪${remaining.to
                   {item.is_split && <span>✓ חצוי</span>}
                   {item.fabric_text && <span>בד: {item.fabric_text}</span>}
                 </div>
-                {item.notes && (
-                  <div className="text-slate-400 text-xs mt-1">{item.notes}</div>
-                )}
+                {item.notes && <div className="text-slate-400 text-xs mt-1">{item.notes}</div>}
               </div>
             ))}
           </div>
@@ -272,33 +240,22 @@ ${paid > 0 ? `שולם: ₪${paid.toLocaleString()}\nנשאר: ₪${remaining.to
       {/* הצללה */}
       {shadings.length > 0 && (
         <div className="card mb-3 overflow-hidden">
-          <div className="bg-orange-500 text-white px-4 py-2 text-sm font-bold">
-            הצללה ({shadings.length})
-          </div>
+          <div className="bg-orange-500 text-white px-4 py-2 text-sm font-bold">הצללה ({shadings.length})</div>
           <div className="divide-y">
             {shadings.map((item, i) => (
               <div key={item.id} className="p-3 text-sm">
-                <div className="flex justify-between items-start">
-                  <div>
-                    <span className="font-semibold">
-                      {i + 1}. {SHADING_LABELS[item.subtype ?? ''] ?? item.subtype} — {item.location}
-                    </span>
-                    {!item.for_execution && (
-                      <span className="mr-2 text-xs text-slate-400">(לא לביצוע)</span>
-                    )}
-                  </div>
+                <div className="flex justify-between">
+                  <span className="font-semibold">{i + 1}. {SHADING_LABELS[item.subtype ?? ''] ?? item.subtype} — {item.location}</span>
                   <span className="font-bold text-brand">₪{item.price.toLocaleString()}</span>
                 </div>
-                <div className="text-slate-500 mt-1 flex flex-wrap gap-x-3 gap-y-0.5 text-xs">
+                <div className="text-slate-500 mt-1 flex flex-wrap gap-x-3 text-xs">
                   <span>רוחב: {item.width_cm} ס״מ</span>
                   <span>גובה: {item.heights_cm.join(', ')} ס״מ</span>
                   {item.mount_type && <span>התקנה: {item.mount_type}</span>}
                   {item.mechanism_side && <span>צד: {item.mechanism_side}</span>}
                   {item.color_fabric_text && <span>צבע: {item.color_fabric_text}</span>}
                 </div>
-                {item.notes && (
-                  <div className="text-slate-400 text-xs mt-1">{item.notes}</div>
-                )}
+                {item.notes && <div className="text-slate-400 text-xs mt-1">{item.notes}</div>}
               </div>
             ))}
           </div>
@@ -309,42 +266,15 @@ ${paid > 0 ? `שולם: ₪${paid.toLocaleString()}\nנשאר: ₪${remaining.to
       <div className="card p-4 mb-3">
         <div className="text-xs font-bold text-slate-500 mb-3">סיכום תשלום</div>
         <div className="space-y-2 text-sm">
-          <div className="flex justify-between">
-            <span className="text-slate-600">סה״כ פריטים</span>
-            <span>₪{order.items_total.toLocaleString()}</span>
-          </div>
-          {order.discount > 0 && (
-            <div className="flex justify-between text-slate-500">
-              <span>הנחה</span>
-              <span>− ₪{order.discount.toLocaleString()}</span>
-            </div>
-          )}
-          {order.installation_fee > 0 && (
-            <div className="flex justify-between text-slate-400 text-xs">
-              <span>התקנה (בנפרד)</span>
-              <span>₪{order.installation_fee.toLocaleString()}</span>
-            </div>
-          )}
-          <div className="flex justify-between font-bold text-base border-t pt-2">
-            <span>סה״כ לתשלום</span>
-            <span>₪{order.final_total.toLocaleString()}</span>
-          </div>
-          {paid > 0 && (
-            <div className="flex justify-between text-green-700">
-              <span>שולם על החשבון</span>
-              <span>₪{paid.toLocaleString()}</span>
-            </div>
-          )}
-          {remaining > 0 && (
-            <div className="flex justify-between text-amber-700 font-semibold">
-              <span>נשאר לתשלום</span>
-              <span>₪{remaining.toLocaleString()}</span>
-            </div>
-          )}
+          <div className="flex justify-between"><span className="text-slate-600">סה״כ פריטים</span><span>₪{order.items_total.toLocaleString()}</span></div>
+          {order.discount > 0 && <div className="flex justify-between text-slate-500"><span>הנחה</span><span>− ₪{order.discount.toLocaleString()}</span></div>}
+          {order.installation_fee > 0 && <div className="flex justify-between text-slate-400 text-xs"><span>התקנה (בנפרד)</span><span>₪{order.installation_fee.toLocaleString()}</span></div>}
+          <div className="flex justify-between font-bold text-base border-t pt-2"><span>סה״כ לתשלום</span><span>₪{order.final_total.toLocaleString()}</span></div>
+          {paid > 0 && <div className="flex justify-between text-green-700"><span>שולם</span><span>₪{paid.toLocaleString()}</span></div>}
+          {remaining > 0 && <div className="flex justify-between text-amber-700 font-semibold"><span>נשאר</span><span>₪{remaining.toLocaleString()}</span></div>}
         </div>
       </div>
 
-      {/* הערות */}
       {order.notes && (
         <div className="card p-4 mb-3">
           <div className="text-xs font-bold text-slate-500 mb-1">הערות</div>
@@ -352,7 +282,6 @@ ${paid > 0 ? `שולם: ₪${paid.toLocaleString()}\nנשאר: ₪${remaining.to
         </div>
       )}
 
-      {/* חתימה */}
       {order.signature_name && (
         <div className="card p-4">
           <div className="text-xs font-bold text-slate-500 mb-1">חתימת לקוח</div>
@@ -360,23 +289,14 @@ ${paid > 0 ? `שולם: ₪${paid.toLocaleString()}\nנשאר: ₪${remaining.to
         </div>
       )}
 
-      {/* דיאלוג ביטול */}
       {showCancelConfirm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
           <div className="bg-white rounded-2xl p-6 w-full max-w-sm">
             <h3 className="font-bold text-lg mb-2">לבטל את ההזמנה?</h3>
-            <p className="text-slate-500 text-sm mb-4">
-              הזמנה #{orderNum} של {order.customer_name_snapshot} תסומן כמבוטלת.
-            </p>
+            <p className="text-slate-500 text-sm mb-4">הזמנה #{orderNum} של {order.customer_name_snapshot} תסומן כמבוטלת.</p>
             <div className="flex gap-3">
-              <button className="btn-primary bg-red-500 hover:bg-red-600 flex-1"
-                      onClick={cancelOrder}>
-                כן, בטל הזמנה
-              </button>
-              <button className="btn-ghost flex-1"
-                      onClick={() => setShowCancelConfirm(false)}>
-                חזרה
-              </button>
+              <button className="btn-primary bg-red-500 hover:bg-red-600 flex-1" onClick={cancelOrder}>כן, בטל</button>
+              <button className="btn-ghost flex-1" onClick={() => setShowCancelConfirm(false)}>חזרה</button>
             </div>
           </div>
         </div>
