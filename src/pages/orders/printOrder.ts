@@ -195,7 +195,7 @@ export function buildFormFromOrder(order: {
   profiles?: { full_name: string }
   order_items?: Array<{
     family: string
-    subtype?: string
+    subtype?: string | null
     location: string
     width_cm: number
     heights_cm: number[]
@@ -203,7 +203,7 @@ export function buildFormFromOrder(order: {
     hem_cm?: number
     shtaif_cm?: number
     is_split?: boolean
-    fabric_text?: string
+    fabric_text?: string | null
     mount_type?: string
     mechanism_side?: string
     color_fabric_text?: string
