@@ -71,7 +71,7 @@ export default function OrderDetail() {
   const load = async () => {
     const { data } = await supabase
       .from('orders')
-      .select('*, profiles(full_name), order_items(*), payments(*)')
+      .select('*, profiles!orders_agent_id_fkey(full_name), order_items(*), payments(*)')
       .eq('id', id)
       .single()
     setOrder(data as Order)

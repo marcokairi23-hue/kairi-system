@@ -26,7 +26,7 @@ export default function EditOrder() {
   useEffect(() => {
     supabase
       .from('orders')
-      .select('*, profiles(full_name), order_items(*), payments(*)')
+      .select('*, profiles!orders_agent_id_fkey(full_name), order_items(*), payments(*)')
       .eq('id', id)
       .single()
       .then(({ data }) => {

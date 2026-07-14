@@ -63,7 +63,7 @@ export default function OrdersList() {
   const load = async () => {
     const { data, error } = await supabase
       .from('orders')
-      .select('*, profiles(full_name), order_items(*), payments(*)')
+     .select('*, profiles!orders_agent_id_fkey(full_name), order_items(*), payments(*)')
       .order('created_at', { ascending: false })
     if (error) console.error('שגיאה בטעינת הזמנות:', error)
     setOrders((data ?? []) as Order[])
