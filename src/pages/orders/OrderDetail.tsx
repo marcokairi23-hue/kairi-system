@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { printOrder, buildFormFromOrder } from './printOrder'
+import { getSignatureUrl } from '../../lib/uploadSignature'
 import {
   ORDER_STATUS_LABELS, ORDER_STATUS_COLORS, ORDER_STATUS_NEXT,
   ITEM_STATUS_LABELS, ITEM_STATUS_COLORS, SHADING_LABELS, calcProgress,
@@ -51,6 +52,7 @@ interface Order {
   total_width_m: number
   send_email: string | null
   signature_name: string | null
+  signature_url: string | null
   notes: string | null
   created_at: string
   profiles?: { full_name: string }
@@ -65,6 +67,9 @@ export default function OrderDetail() {
   const navigate = useNavigate()
   const [order, setOrder] = useState<Order | null>(null)
   const [loading, setLoading] = useState(true)
+  const [signatureImgUrl, setSignatureImgUrl] = useState<string | null>(null)
+  const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null)
+  const [signatureLoading, setSignatureLoading] = useState(false)
   const [updatingStatus, setUpdatingStatus] = useState(false)
   const [showCancelConfirm, setShowCancelConfirm] = useState(false)
 
@@ -76,6 +81,28 @@ export default function OrderDetail() {
       .single()
     setOrder(data as Order)
     setLoading(false)
+    if (data?.signature_url) {
+      setSignatureLoading(true)
+      getSignatureUrl(data.signature_url).then(async (url) => {
+        setSignatureImgUrl(url)
+        if (!url) {
+          setSignatureLoading(false)
+          return
+        }
+        try {
+          const blob = await fetch(url).then((r) => r.blob())
+          const reader = new FileReader()
+          reader.onloadend = () => {
+            setSignatureDataUrl(reader.result as string)
+            setSignatureLoading(false)
+          }
+          reader.readAsDataURL(blob)
+        } catch {
+          setSignatureDataUrl(null)
+          setSignatureLoading(false)
+        }
+      })
+    }
   }
 
   useEffect(() => { load() }, [id])
@@ -153,7 +180,12 @@ export default function OrderDetail() {
 
       {/* פעולות */}
       <div className="grid grid-cols-2 gap-2 mb-3">
-        <button className="btn-ghost text-sm" onClick={() => printOrder(form, orderNum, true)}>
+        <button
+          className="btn-ghost text-sm"
+          disabled={signatureLoading}
+          title={signatureLoading ? 'טוען חתימה...' : undefined}
+          onClick={() => printOrder({ ...form, signatureDataUrl }, orderNum, true)}
+        >
           🖨️ הדפס ללקוח
         </button>
         <button className="btn-ghost text-sm" onClick={() => printOrder(form, orderNum, false)}>
@@ -305,10 +337,14 @@ export default function OrderDetail() {
         </div>
       )}
 
-      {order.signature_name && (
+      {(signatureImgUrl || order.signature_name) && (
         <div className="card p-4">
           <div className="text-xs font-bold text-slate-500 mb-1">חתימת לקוח</div>
-          <div className="text-sm">{order.signature_name}</div>
+          {signatureImgUrl ? (
+            <img src={signatureImgUrl} alt="חתימת לקוח" className="max-h-40 rounded border" />
+          ) : (
+            <div className="text-sm">{order.signature_name}</div>
+          )}
         </div>
       )}
 

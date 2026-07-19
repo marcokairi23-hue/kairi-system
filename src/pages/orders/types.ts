@@ -1,3 +1,5 @@
+import { uid } from '../../lib/uid'
+
 export type ItemFamily = 'curtain' | 'shading'
 export type ShadingSubtype = 'zebra' | 'venetian' | 'roman' | 'roller'
 export type ItemStatus = 'new' | 'cut' | 'sewing' | 'ready' | 'installed' | 'cancelled'
@@ -63,6 +65,7 @@ export interface OrderForm {
   payment_method: string
   send_email: string
   signature_name: string
+  signatureDataUrl?: string | null
   notes: string
 }
 
@@ -87,7 +90,7 @@ export const ITEM_STATUSES: { value: ItemStatus; label: string }[] = [
 
 export function newCurtainItem(): CurtainItem {
   return {
-    id: crypto.randomUUID(),
+    id: uid(),
     family: 'curtain',
     location: '',
     width_cm: '',
@@ -106,7 +109,7 @@ export function newCurtainItem(): CurtainItem {
 
 export function newShadingItem(): ShadingItem {
   return {
-    id: crypto.randomUUID(),
+    id: uid(),
     family: 'shading',
     subtype: 'zebra',
     location: '',
@@ -139,6 +142,7 @@ export function emptyForm(agentName: string): OrderForm {
     payment_method: '',
     send_email: '',
     signature_name: '',
+    signatureDataUrl: null,
     notes: '',
   }
 }

@@ -1,4 +1,5 @@
 import { OrderForm, calcItemsTotal, calcRemaining } from './types'
+import { uid } from '../../lib/uid'
 
 const SHADING_LABELS: Record<string, string> = {
   zebra: 'זברה', venetian: 'ונציאני', roman: 'רומי', roller: 'גלילה',
@@ -168,7 +169,11 @@ export function printOrder(form: OrderForm, orderNumber: string | number, showPr
     בדקתי את המידות וסוג התפירה ואני מאשר/ת את ההזמנה (לא תתקבל תלונה)
   </div>
   <div class="signature-block">
-    <div class="sig-line">${form.signature_name || ''}<br/>חתימת הלקוח</div>
+    <div class="sig-line">${
+      form.signatureDataUrl
+        ? `<img src="${form.signatureDataUrl}" alt="חתימה" style="height:80px;max-width:180px;object-fit:contain;display:block;margin:0 auto 4px" />`
+        : (form.signature_name || '')
+    }<br/>חתימת הלקוח</div>
     <div class="sig-line">חתימת הסוכן</div>
   </div>` : ''}
 </div>
@@ -220,7 +225,7 @@ export function buildFormFromOrder(order: {
   const curtain_items = (order.order_items ?? [])
     .filter(i => i.family === 'curtain')
     .map(i => ({
-      id: crypto.randomUUID(),
+      id: uid(),
       family: 'curtain' as const,
       location: i.location,
       width_cm: String(i.width_cm),
@@ -239,7 +244,7 @@ export function buildFormFromOrder(order: {
   const shading_items = (order.order_items ?? [])
     .filter(i => i.family === 'shading')
     .map(i => ({
-      id: crypto.randomUUID(),
+      id: uid(),
       family: 'shading' as const,
       subtype: (i.subtype ?? 'zebra') as import('./types').ShadingSubtype,
       location: i.location,

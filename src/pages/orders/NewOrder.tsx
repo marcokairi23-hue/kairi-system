@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../lib/auth'
 import { supabase } from '../../lib/supabase'
+import { uid } from '../../lib/uid'
 import {
   OrderForm, OrderAccessory,
   emptyForm, newCurtainItem, newShadingItem,
@@ -12,6 +13,8 @@ import { Field, SummaryBox, BlockHeader } from './FormFields'
 import CurtainCard from './CurtainCard'
 import ShadingCard from './ShadingCard'
 import { printOrder } from './printOrder'
+import SignaturePad from '../../components/SignaturePad'
+import { uploadSignature } from '../../lib/uploadSignature'
 
 export default function NewOrder() {
   const { profile } = useAuth()
@@ -40,7 +43,7 @@ export default function NewOrder() {
   // --- אביזרים ---
   const addAccessory = () => setF('accessories', [
     ...form.accessories,
-    { id: crypto.randomUUID(), name: '', quantity: '1', unit_price: '' } as OrderAccessory,
+    { id: uid(), name: '', quantity: '1', unit_price: '' } as OrderAccessory,
   ])
   const updateAccessory = (i: number, acc: OrderAccessory) =>
     setF('accessories', form.accessories.map((a, idx) => idx === i ? acc : a))
@@ -89,6 +92,18 @@ export default function NewOrder() {
 
       // הקצאת מספר הזמנה
       await supabase.rpc('allocate_order_number', { p_order_id: order.id })
+
+      // העלאת חתימה (לא חוסמת את שמירת ההזמנה בכישלון)
+      let signatureUploadFailed = false
+      if (form.signatureDataUrl) {
+        try {
+          const path = await uploadSignature(order.id, form.signatureDataUrl)
+          await supabase.from('orders').update({ signature_url: path }).eq('id', order.id)
+        } catch (sigErr) {
+          console.error('שגיאה בהעלאת חתימה:', sigErr)
+          signatureUploadFailed = true
+        }
+      }
 
       // פריטי וילונות
       if (form.curtain_items.length > 0) {
@@ -152,6 +167,11 @@ export default function NewOrder() {
         changed_by: profile!.id,
         note: 'הזמנה נוצרה',
       })
+
+      if (signatureUploadFailed) {
+        setError('ההזמנה נשמרה אך החתימה לא הועלתה')
+        return
+      }
 
       navigate('/orders')
     } catch (err: unknown) {
@@ -359,6 +379,14 @@ export default function NewOrder() {
             <input className="input" value={form.signature_name}
                    onChange={e => setF('signature_name', e.target.value)}
                    placeholder="הקלד שם לחתימה או השאר ריק" />
+          </Field>
+
+          <Field label="חתימה (ציור)">
+            <SignaturePad
+              value={form.signatureDataUrl}
+              onChange={dataUrl => setF('signatureDataUrl', dataUrl)}
+              disabled={busy}
+            />
           </Field>
         </div>
       </div>

@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../../lib/auth'
 import { supabase } from '../../lib/supabase'
+import { uid } from '../../lib/uid'
 import {
   OrderForm, emptyForm,
   calcItemsTotal, calcTotalWidth, calcAutoTotal, calcRemaining,
@@ -12,6 +13,8 @@ import { Field, SummaryBox, BlockHeader } from './FormFields'
 import CurtainCard from './CurtainCard'
 import ShadingCard from './ShadingCard'
 import { printOrder, buildFormFromOrder } from './printOrder'
+import SignaturePad from '../../components/SignaturePad'
+import { uploadSignature, getSignatureUrl } from '../../lib/uploadSignature'
 
 export default function EditOrder() {
   const { id } = useParams()
@@ -22,6 +25,7 @@ export default function EditOrder() {
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [existingSignatureUrl, setExistingSignatureUrl] = useState<string | null>(null)
 
   useEffect(() => {
     supabase
@@ -34,6 +38,9 @@ export default function EditOrder() {
         setOrderNumber(data.order_number ?? 'טיוטה')
         setForm(buildFormFromOrder(data))
         setLoading(false)
+        if (data.signature_url) {
+          getSignatureUrl(data.signature_url).then(setExistingSignatureUrl)
+        }
       })
   }, [id])
 
@@ -53,7 +60,7 @@ export default function EditOrder() {
 
   const addAccessory = () => setF('accessories', [
     ...form.accessories,
-    { id: crypto.randomUUID(), name: '', quantity: '1', unit_price: '' } as OrderAccessory,
+    { id: uid(), name: '', quantity: '1', unit_price: '' } as OrderAccessory,
   ])
   const updateAccessory = (i: number, acc: OrderAccessory) =>
     setF('accessories', form.accessories.map((a, idx) => idx === i ? acc : a))
@@ -68,7 +75,18 @@ export default function EditOrder() {
 
   const save = async () => {
     setBusy(true); setError(null)
+    let signatureUploadFailed = false
     try {
+      let signaturePath: string | undefined
+      if (form.signatureDataUrl) {
+        try {
+          signaturePath = await uploadSignature(id!, form.signatureDataUrl)
+        } catch (e) {
+          signatureUploadFailed = true
+          setError(e instanceof Error ? e.message : 'שגיאה בהעלאת החתימה')
+        }
+      }
+
       // עדכון הזמנה
       await supabase.from('orders').update({
         customer_name_snapshot: form.customer_name,
@@ -81,6 +99,7 @@ export default function EditOrder() {
         total_width_m: totalWidth,
         send_email: form.send_email || null,
         signature_name: form.signature_name || null,
+        ...(signaturePath ? { signature_url: signaturePath } : {}),
         notes: form.notes || null,
         updated_at: new Date().toISOString(),
       }).eq('id', id)
@@ -131,7 +150,9 @@ export default function EditOrder() {
         )
       }
 
-      navigate(`/orders/${id}`)
+      if (!signatureUploadFailed) {
+        navigate(`/orders/${id}`)
+      }
     } catch (err: unknown) {
       setError('שגיאה בשמירה: ' + (err instanceof Error ? err.message : JSON.stringify(err)))
     } finally {
@@ -301,6 +322,14 @@ export default function EditOrder() {
           <Field label="חתימה (שם הלקוח)">
             <input className="input" value={form.signature_name}
                    onChange={e => setF('signature_name', e.target.value)} />
+          </Field>
+
+          <Field label="חתימת לקוח (ציור)">
+            <SignaturePad
+              value={form.signatureDataUrl ?? existingSignatureUrl}
+              onChange={dataUrl => setF('signatureDataUrl', dataUrl)}
+              disabled={busy}
+            />
           </Field>
         </div>
       </div>
