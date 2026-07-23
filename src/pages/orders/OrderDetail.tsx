@@ -1,7 +1,9 @@
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
+import { useAuth } from '../../lib/auth'
 import { printOrder, buildFormFromOrder } from './printOrder'
+import OrderActivityTab from './OrderActivityTab'
 import { getSignatureUrl } from '../../lib/uploadSignature'
 import {
   ORDER_STATUS_LABELS, ORDER_STATUS_COLORS, ORDER_STATUS_NEXT,
@@ -63,6 +65,7 @@ interface Order {
 
 
 export default function OrderDetail() {
+  const { profile } = useAuth()
   const { id } = useParams()
   const navigate = useNavigate()
   const [order, setOrder] = useState<Order | null>(null)
@@ -72,6 +75,7 @@ export default function OrderDetail() {
   const [signatureLoading, setSignatureLoading] = useState(false)
   const [updatingStatus, setUpdatingStatus] = useState(false)
   const [showCancelConfirm, setShowCancelConfirm] = useState(false)
+  const [tab, setTab] = useState<'details' | 'activity'>('details')
 
   const load = async () => {
     const { data } = await supabase
@@ -129,6 +133,7 @@ export default function OrderDetail() {
       order_id: id,
       from_status: order.status,
       to_status: nextStatus,
+      changed_by: profile?.id ?? null,
       note: 'עדכון ידני',
     })
     await load()
@@ -142,6 +147,7 @@ export default function OrderDetail() {
       order_id: id,
       from_status: order.status,
       to_status: 'cancelled',
+      changed_by: profile?.id ?? null,
       note: 'בוטלה ידנית',
     })
     setShowCancelConfirm(false)
@@ -177,6 +183,29 @@ export default function OrderDetail() {
           </div>
         </div>
       </div>
+
+      <div className="flex gap-1 mb-3">
+        <button
+          onClick={() => setTab('details')}
+          className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+            tab === 'details' ? 'bg-brand text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+          }`}
+        >
+          פרטים
+        </button>
+        <button
+          onClick={() => setTab('activity')}
+          className={`px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
+            tab === 'activity' ? 'bg-brand text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
+          }`}
+        >
+          יומן פעילות
+        </button>
+      </div>
+
+      {tab === 'activity' && <OrderActivityTab orderId={id!} />}
+
+      {tab === 'details' && <>
 
       {/* פעולות */}
       <div className="grid grid-cols-2 gap-2 mb-3">
@@ -347,6 +376,8 @@ export default function OrderDetail() {
           )}
         </div>
       )}
+
+      </>}
 
       {showCancelConfirm && (
         <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">

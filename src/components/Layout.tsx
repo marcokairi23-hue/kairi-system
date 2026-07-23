@@ -7,6 +7,7 @@ const navItems = [
   { to: '/orders', label: 'הזמנות' },
   { to: '/items', label: 'פריטים' },
   { to: '/fabrics', label: 'בדים' },
+  { to: '/activity', label: 'יומן פעילות' },
 ]
 
 export default function Layout({ children }: { children: ReactNode }) {

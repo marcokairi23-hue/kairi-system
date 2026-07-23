@@ -14,32 +14,25 @@
 
 ---
 
-## שלב 1 — ניקוי כפילות שמות קבצים 🔴
+## שלב 1 — ניקוי כפילות שמות קבצים 🔴 ✅ הושלם
 
 **למה:** `printOrder.ts` ו-`PrintOrder.tsx` קיימים באותה תיקייה. Windows לא מבחין ביניהם, שרת הבנייה של Cloudflare (לינוקס) כן. זה כבר שבר בנייה בעבר.
 
-**לבצע:**
-1. grep על שני השמות — מי מייבא מה.
-2. דווח לי: האם שניהם בשימוש, או שאחד יתום.
-3. **עצור לאישור לפני שינוי.**
-4. אחרי אישור: שנה שם לפי מה שנסכם.
+**מה נעשה:** `PrintOrder.tsx` היה יתום (אף קובץ לא ייבא אותו) — נמחק, יחד עם שתי תיקיות ריקות משריד ספרינט הייצור (`src/pages/production`, `src/pages/suppliers`); build אומת.
 
 ---
 
-## שלב 2 — תיקון שאילתות profiles 🔴
+## שלב 2 — תיקון שאילתות profiles 🔴 ✅ הושלם
 
 **למה:** לטבלת `orders` יש שני FK ל-`profiles`. שאילתה עמומה מחזירה PGRST201.
 
-**לתקן ל-`profiles!orders_agent_id_fkey(...)`:**
-- `src/pages/orders/OrdersList.tsx:158`
-- `src/pages/orders/PrintOrder.tsx:55`
-- `src/pages/items/ItemsList.tsx:74`
-
-הרץ grep על `profiles(` בסיום — צריך לחזור ריק.
+**מה נעשה:** תוקנו ל-`profiles!orders_agent_id_fkey(...)` ב-`OrdersList.tsx:158` וב-`ItemsList.tsx:74` (השורה ב-`PrintOrder.tsx:55` התייתרה עם מחיקת הקובץ בשלב 1); grep על `profiles(` חוזר ריק, build אומת.
 
 ---
 
-## שלב 3 — עמוד יומן פעילות כללי 🟢
+## שלב 3 — עמוד יומן פעילות כללי 🟢 ✅ הושלם
+
+**מה נעשה:** נוצר `src/pages/activity/ActivityLog.tsx` + מסלול `/activity` + קישור בניווט; סוג פעולה נגזר מ-`order_item_id` (לא null → פריט), בלי עמודה חדשה ובלי תשלומים (לא נשמרים בטבלה כיום); לפני הבנייה תוקנו שני מקומות ב-`OrderDetail.tsx` שלא מילאו `changed_by`.
 
 **מטרה:** מסך אחד שמציג את כל הפעילות במערכת — מי, מה, מתי.
 
@@ -61,7 +54,9 @@
 
 ---
 
-## שלב 4 — יומן פעילות בתוך ההזמנה 🟢
+## שלב 4 — יומן פעילות בתוך ההזמנה 🟢 ✅ הושלם
+
+**מה נעשה:** נוצר `src/pages/orders/OrderActivityTab.tsx` — משתמש ב-`ActivityRow`/`ActivityRowLine` הקיימים מ-`ActivityLog.tsx`, ללא שכפול קוד. סינון ל-`order_id`, מיון עולה (`ascending: true`), `showOrderNumber={false}`, בלי pagination. חובר כלשונית "יומן פעילות" ב-`OrderDetail.tsx` לצד לשונית "פרטים" חדשה שעוטפת את התוכן הקיים.
 
 **מטרה:** אותו מידע, מסונן להזמנה אחת.
 
@@ -103,32 +98,25 @@
 
 ---
 
-## שלב 1 — ניקוי כפילות שמות קבצים 🔴
+## שלב 1 — ניקוי כפילות שמות קבצים 🔴 ✅ הושלם
 
 **למה:** `printOrder.ts` ו-`PrintOrder.tsx` קיימים באותה תיקייה. Windows לא מבחין ביניהם, שרת הבנייה של Cloudflare (לינוקס) כן. זה כבר שבר בנייה בעבר.
 
-**לבצע:**
-1. grep על שני השמות — מי מייבא מה.
-2. דווח לי: האם שניהם בשימוש, או שאחד יתום.
-3. **עצור לאישור לפני שינוי.**
-4. אחרי אישור: שנה שם לפי מה שנסכם.
+**מה נעשה:** `PrintOrder.tsx` היה יתום (אף קובץ לא ייבא אותו) — נמחק, יחד עם שתי תיקיות ריקות משריד ספרינט הייצור (`src/pages/production`, `src/pages/suppliers`); build אומת.
 
 ---
 
-## שלב 2 — תיקון שאילתות profiles 🔴
+## שלב 2 — תיקון שאילתות profiles 🔴 ✅ הושלם
 
 **למה:** לטבלת `orders` יש שני FK ל-`profiles`. שאילתה עמומה מחזירה PGRST201.
 
-**לתקן ל-`profiles!orders_agent_id_fkey(...)`:**
-- `src/pages/orders/OrdersList.tsx:158`
-- `src/pages/orders/PrintOrder.tsx:55`
-- `src/pages/items/ItemsList.tsx:74`
-
-הרץ grep על `profiles(` בסיום — צריך לחזור ריק.
+**מה נעשה:** תוקנו ל-`profiles!orders_agent_id_fkey(...)` ב-`OrdersList.tsx:158` וב-`ItemsList.tsx:74` (השורה ב-`PrintOrder.tsx:55` התייתרה עם מחיקת הקובץ בשלב 1); grep על `profiles(` חוזר ריק, build אומת.
 
 ---
 
-## שלב 3 — עמוד יומן פעילות כללי 🟢
+## שלב 3 — עמוד יומן פעילות כללי 🟢 ✅ הושלם
+
+**מה נעשה:** נוצר `src/pages/activity/ActivityLog.tsx` + מסלול `/activity` + קישור בניווט; סוג פעולה נגזר מ-`order_item_id` (לא null → פריט), בלי עמודה חדשה ובלי תשלומים (לא נשמרים בטבלה כיום); לפני הבנייה תוקנו שני מקומות ב-`OrderDetail.tsx` שלא מילאו `changed_by`.
 
 **מטרה:** מסך אחד שמציג את כל הפעילות במערכת — מי, מה, מתי.
 
@@ -150,7 +138,9 @@
 
 ---
 
-## שלב 4 — יומן פעילות בתוך ההזמנה 🟢
+## שלב 4 — יומן פעילות בתוך ההזמנה 🟢 ✅ הושלם
+
+**מה נעשה:** נוצר `src/pages/orders/OrderActivityTab.tsx` — משתמש ב-`ActivityRow`/`ActivityRowLine` הקיימים מ-`ActivityLog.tsx`, ללא שכפול קוד. סינון ל-`order_id`, מיון עולה (`ascending: true`), `showOrderNumber={false}`, בלי pagination. חובר כלשונית "יומן פעילות" ב-`OrderDetail.tsx` לצד לשונית "פרטים" חדשה שעוטפת את התוכן הקיים.
 
 **מטרה:** אותו מידע, מסונן להזמנה אחת.
 
