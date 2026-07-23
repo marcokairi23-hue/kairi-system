@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState } from 'react'
-import { Link } from 'react-router-dom'
+import { Link, useSearchParams } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/auth'
 import OrderCardView from './OrderCardView'
@@ -31,9 +31,10 @@ const VIEW_KEY = 'kairi_orders_view'
 
 export default function OrdersList() {
   const { profile } = useAuth()
+  const [searchParams] = useSearchParams()
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState('all')
+  const [activeTab, setActiveTab] = useState(() => searchParams.get('tab') || 'all')
   const [search, setSearch] = useState('')
   const [view, setView] = useState<ViewMode>(
     () => (localStorage.getItem(VIEW_KEY) as ViewMode) || 'cards'
