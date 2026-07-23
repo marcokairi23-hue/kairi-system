@@ -155,7 +155,7 @@ export default function OrdersList() {
     // שלוף מחדש את ההזמנה המעודכנת
     const { data } = await supabase
       .from('orders')
-      .select('*, profiles(full_name), order_items(*), payments(*)')
+      .select('*, profiles!orders_agent_id_fkey(full_name), order_items(*), payments(*)')
       .eq('id', orderId)
       .single()
 

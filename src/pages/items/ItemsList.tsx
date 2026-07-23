@@ -71,7 +71,7 @@ export default function ItemsList() {
     setLoading(true)
     const { data, error } = await supabase
       .from('order_items')
-      .select('*, orders(order_number, customer_name_snapshot, status, profiles(full_name))')
+      .select('*, orders(order_number, customer_name_snapshot, status, profiles!orders_agent_id_fkey(full_name))')
 
     if (error) {
       console.error('שגיאה בטעינת פריטים:', error)
