@@ -76,9 +76,14 @@ src/
 
 ```
 supabase/
-└── migrations/
-    ├── 0001_initial_schema.sql
-    └── 0002_ready_status_and_item_timestamps.sql
+├── migrations/
+│   ├── 0001_initial_schema.sql
+│   └── 0002_ready_status_and_item_timestamps.sql
+└── functions/
+    ├── create-user/          # Edge Function — יצירת משתמש חדש עם service_role, ראו §6
+    │   └── index.ts
+    └── delete-user/          # Edge Function — מחיקת משתמש עם service_role, ראו §6
+        └── index.ts
 ```
 ⚠️ אין `0003` בפרויקט — ראו סעיף 3 (פער בין הסכמה בפועל למיגרציות).
 
@@ -255,3 +260,13 @@ new (חדש) → cut (נגזר) → sewing (במתפרה) → ready (מוכן) �
 - **Deploy:** `git add . && git commit -m "..." && git push` → Cloudflare בונה אוטומטית
 - **באג נפוץ:** popup blocker בהדפסה — הפתרון הוא Blob URL, לא `window.open('')`
 - **קבצים בעלי שמות דומים** (למשל `printOrder.ts` מול `PrintOrder.tsx` — הכפול הזה כבר נמחק) — Windows לא מבחין, שרת הבנייה של Cloudflare (לינוקס) כן. תמיד לבדוק לפני יצירת קובץ חדש.
+
+### 6. Edge Functions
+
+יש חיבור MCP פעיל לפרויקט Supabase (`kairi-os`) — פריסת Edge Function נעשית ישירות דרך ה-MCP (`deploy_edge_function`), **בלי** צורך ב-`supabase login`/`link` מקומי.
+
+**`create-user`** (נוצר 2026-07-24, שלב 12ב): יוצר משתמש חדש ב-`auth.users` עם סיסמה זמנית שהאדמין קובע. מוודא JWT + `role === 'admin'` של הקורא לפני שימוש ב-`service_role` (הזמין אוטומטית בתוך הפונקציה כ-`SUPABASE_SERVICE_ROLE_KEY`, לא נחשף לקליינט). לא נוגע בטבלת `profiles` ליצירה הראשונית — הטריגר `on_auth_user_created` הקיים כבר עושה זאת; הפונקציה רק משלימה `phone`/`role`. נקרא מ-`UsersList.tsx` דרך `supabase.functions.invoke('create-user', ...)`.
+
+**`delete-user`** (נוצר 2026-07-24, שלב 12ב): מוחק משתמש קיים. אותו דפוס אבטחה כמו `create-user` (JWT + admin בלבד). ⚠️ **מלכודת עיצוב מכוונת:** שדות FK מ-`orders.agent_id`, `payments.received_by`, `order_status_history.changed_by` וכו' ל-`profiles(id)` הם ללא `on delete cascade`/`set null` — כך שמחיקת משתמש שכבר ביצע פעולה כלשהי (יצר הזמנה/קיבל תשלום/שינה סטטוס) **נכשלת בכוונה** בשגיאת foreign key ב-DB, כדי לא לאבד את יומן "מי עשה מה" (המניע המרכזי של הפרויקט). הפונקציה תופסת את השגיאה ומחזירה הודעה בעברית שמפנה להשתמש ב-`is_active=false` במקום. מחיקה אמיתית עובדת רק על משתמש שמעולם לא ביצע פעולה. ב-UI (`UsersList.tsx`) יש אישור בכתב — הקלדת/הדבקת המילה "מחיקה" — לפני קריאה לפונקציה.
+
+עדכון קוד לפונקציה קיימת דורש `deploy_edge_function` מחדש (יוצר גרסה חדשה) — אין hot-reload מקומי כמו ב-Cloudflare Pages.

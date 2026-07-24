@@ -146,8 +146,8 @@ Cloudflare בונה אוטומטית.
 
 ✅ שלבים 1-7
 
-פריטים פתוחים:
+תוקן 2026-07-24 — **שלושת הפריטים שהיו פתוחים כעת סגורים:**
 
-- כישלון העלאת חתימה ב-NewOrder: ההזמנה כבר נשמרה, לחיצה חוזרת על "שמור" תיצור הזמנה כפולה
-- כפתור "נקה" ב-EditOrder: ה-?? מחזיר את החתימה הישנה, צריך להבחין בין "לא נגעו" ל"נוקה במפורש"
-- הדפסה מרשימת ההזמנות (OrdersList/OrderActions) לא כוללת חתימה — ההמרה ל-dataURL קיימת רק ב-OrderDetail
+- ~~הדפסה מרשימת ההזמנות (OrdersList/OrderActions) לא כוללת חתימה~~ — נבדק בקוד: `OrderActions.tsx` (`doPrint`) כבר ממיר `signature_url` ל-dataURL לפני `printOrder`, בדיוק כמו `OrderDetail.tsx`. היה מתועד כפתור עוד בטעות; תוקן.
+- ~~כישלון העלאת חתימה ב-NewOrder → הזמנה כפולה~~ — `NewOrder.tsx`: נוסף state `createdOrderId`. אם ההזמנה נוצרה אך העלאת החתימה נכשלה, כפתור "שלח הזמנה" ננעל לצמיתות (לא רק כל עוד `busy`), וההודעה כוללת קישור ל-`/orders/:id/edit` להשלמת החתימה.
+- ~~"נקה" ב-EditOrder מחזיר את החתימה הישנה~~ — `EditOrder.tsx`: נוסף state `signatureCleared`. לחיצה על "נקה" (זיהוי: `onChange(null)` מ-`SignaturePad`) גם מאפסת `existingSignatureUrl` (כדי שהקומפוננטה לא תיפול חזרה ל-view עם החתימה הישנה) וגם שולחת `signature_url: null` בעדכון ל-DB.

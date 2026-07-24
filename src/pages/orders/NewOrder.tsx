@@ -23,6 +23,7 @@ export default function NewOrder() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showDialog, setShowDialog] = useState(false)
+  const [createdOrderId, setCreatedOrderId] = useState<string | null>(null)
 
   const setF = (k: keyof OrderForm, v: unknown) => setForm(f => ({ ...f, [k]: v }))
 
@@ -169,7 +170,8 @@ export default function NewOrder() {
       })
 
       if (signatureUploadFailed) {
-        setError('ההזמנה נשמרה אך החתימה לא הועלתה')
+        setCreatedOrderId(order.id)
+        setError('ההזמנה נשמרה אך החתימה לא הועלתה. אפשר להשלים אותה במסך עריכת ההזמנה.')
         return
       }
 
@@ -391,14 +393,26 @@ export default function NewOrder() {
         </div>
       </div>
 
-      {error && <div className="text-red-600 text-sm mb-3 card p-3">{error}</div>}
+      {error && (
+        <div className="text-red-600 text-sm mb-3 card p-3">
+          {error}
+          {createdOrderId && (
+            <>
+              {' '}
+              <button className="underline" onClick={() => navigate(`/orders/${createdOrderId}/edit`)}>
+                לעריכת ההזמנה
+              </button>
+            </>
+          )}
+        </div>
+      )}
 
       {/* כפתורי פעולה */}
       <div className="flex flex-col gap-2">
         <button className="btn-primary py-3 text-base"
-                disabled={busy || !form.customer_name || !form.phone}
+                disabled={busy || !!createdOrderId || !form.customer_name || !form.phone}
                 onClick={() => setShowDialog(true)}>
-          {busy ? 'שומר...' : '📤 שלח הזמנה'}
+          {busy ? 'שומר...' : createdOrderId ? 'ההזמנה נשמרה' : '📤 שלח הזמנה'}
         </button>
         <div className="grid grid-cols-2 gap-2">
           <button className="btn-ghost"

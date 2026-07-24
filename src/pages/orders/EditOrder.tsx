@@ -26,6 +26,7 @@ export default function EditOrder() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [existingSignatureUrl, setExistingSignatureUrl] = useState<string | null>(null)
+  const [signatureCleared, setSignatureCleared] = useState(false)
 
   useEffect(() => {
     supabase
@@ -99,7 +100,7 @@ export default function EditOrder() {
         total_width_m: totalWidth,
         send_email: form.send_email || null,
         signature_name: form.signature_name || null,
-        ...(signaturePath ? { signature_url: signaturePath } : {}),
+        ...(signaturePath ? { signature_url: signaturePath } : signatureCleared ? { signature_url: null } : {}),
         notes: form.notes || null,
         updated_at: new Date().toISOString(),
       }).eq('id', id)
@@ -327,7 +328,15 @@ export default function EditOrder() {
           <Field label="חתימת לקוח (ציור)">
             <SignaturePad
               value={form.signatureDataUrl ?? existingSignatureUrl}
-              onChange={dataUrl => setF('signatureDataUrl', dataUrl)}
+              onChange={dataUrl => {
+                setF('signatureDataUrl', dataUrl)
+                if (dataUrl === null) {
+                  setSignatureCleared(true)
+                  setExistingSignatureUrl(null)
+                } else {
+                  setSignatureCleared(false)
+                }
+              }}
               disabled={busy}
             />
           </Field>
