@@ -78,14 +78,15 @@ src/
 supabase/
 ├── migrations/
 │   ├── 0001_initial_schema.sql
-│   └── 0002_ready_status_and_item_timestamps.sql
+│   ├── 0002_ready_status_and_item_timestamps.sql
+│   └── 0003_fabric_images_storage_policies.sql
 └── functions/
     ├── create-user/          # Edge Function — יצירת משתמש חדש עם service_role, ראו §6
     │   └── index.ts
     └── delete-user/          # Edge Function — מחיקת משתמש עם service_role, ראו §6
         └── index.ts
 ```
-⚠️ אין `0003` בפרויקט — ראו סעיף 3 (פער בין הסכמה בפועל למיגרציות).
+⚠️ עד 2026-07-24 לא היה `0003` בפרויקט — ראו סעיף 3 (פער בין הסכמה בפועל למיגרציות, ספרינט הייצור). `0003_fabric_images_storage_policies.sql` הוא הראשונה מאז — לא קשורה לספרינט הייצור, נוצרה ונפרסה דרך MCP של Supabase.
 
 ---
 
@@ -195,6 +196,7 @@ supabase/
 ### 3.3 RLS — נקודות תשומת לב
 
 - **`settings`:** מדיניות `admin_settings` מתירה כתיבה ל-`admin` בלבד — **לא** ל-`office`, למרות ש-office מנהל תפעול יומיומי. שדה עריכת `stuck_order_days` בדשבורד מוגבל בקוד ל-`admin` בהתאם (ל-office מוצג כטקסט קבוע).
+- **`storage.objects` — קריטי:** RLS מופעל כברירת מחדל גם על באקטים `public: true`. `public` משפיע רק על **קריאה** (GET דרך public URL, בלי אימות) — **העלאה/עדכון/מחיקה עדיין דורשים מדיניות RLS מפורשת** על `storage.objects`, גם אם הבאקט עצמו ציבורי. תוקן ב-`0003` עבור `fabric-images` (היה חסר לגמרי — ראו סעיף 6.1); `documents` כבר היה מכוסה (ראו TASK-signature.md שלב 0). לפני יצירת bucket חדש — לבדוק/להוסיף מדיניות מיד, אחרת העלאות ייכשלו בשקט.
 
 ---
 
@@ -270,3 +272,9 @@ new (חדש) → cut (נגזר) → sewing (במתפרה) → ready (מוכן) �
 **`delete-user`** (נוצר 2026-07-24, שלב 12ב): מוחק משתמש קיים. אותו דפוס אבטחה כמו `create-user` (JWT + admin בלבד). ⚠️ **מלכודת עיצוב מכוונת:** שדות FK מ-`orders.agent_id`, `payments.received_by`, `order_status_history.changed_by` וכו' ל-`profiles(id)` הם ללא `on delete cascade`/`set null` — כך שמחיקת משתמש שכבר ביצע פעולה כלשהי (יצר הזמנה/קיבל תשלום/שינה סטטוס) **נכשלת בכוונה** בשגיאת foreign key ב-DB, כדי לא לאבד את יומן "מי עשה מה" (המניע המרכזי של הפרויקט). הפונקציה תופסת את השגיאה ומחזירה הודעה בעברית שמפנה להשתמש ב-`is_active=false` במקום. מחיקה אמיתית עובדת רק על משתמש שמעולם לא ביצע פעולה. ב-UI (`UsersList.tsx`) יש אישור בכתב — הקלדת/הדבקת המילה "מחיקה" — לפני קריאה לפונקציה.
 
 עדכון קוד לפונקציה קיימת דורש `deploy_edge_function` מחדש (יוצר גרסה חדשה) — אין hot-reload מקומי כמו ב-Cloudflare Pages.
+
+### 6.1 Storage — באג העלאת תמונות בדים (תוקן 2026-07-24)
+
+`fabric-images` (`FabricForm.tsx`) היה `public: true` אבל **בלי אף מדיניות RLS על `storage.objects`** — העלאה (INSERT) נכשלה בשקט כי public משפיע רק על קריאה. תוקן ב-`0003_fabric_images_storage_policies.sql`: INSERT/UPDATE/DELETE מוגבל ל-`admin`/`office` (תואם `office_fabric_images` על טבלת ה-DB). נפרס ישירות דרך `apply_migration` ב-MCP. ראו גם §3.3 לעיל.
+
+**כיווץ תמונות:** כרגע `FabricForm.tsx` מעלה את קובץ ה-`File` המקורי כמו שהוא — בלי שינוי גודל/דחיסה בצד הלקוח. אין היום שום מנגנון "תמונה קטנה לרשימה + מקור מלא בפתיחה". זה שיפור עתידי אפשרי (resize ל-canvas לפני העלאה) — לא בוצע.
