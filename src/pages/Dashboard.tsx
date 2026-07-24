@@ -99,10 +99,10 @@ export default function Dashboard() {
       <p className="text-slate-500 mb-6">מה עושים היום?</p>
 
       {/* יתרות + סטטוסים */}
-      <div className="card p-4 mb-3">
+      <Link to="/orders?tab=balance" className="card p-4 mb-3 block hover:shadow-md transition-shadow">
         <div className="text-xs font-bold text-slate-500 mb-1">יתרות פתוחות לגבייה</div>
         <div className="text-2xl font-bold text-brand">{fmt(openBalance)}</div>
-      </div>
+      </Link>
 
       <div className="grid grid-cols-3 gap-2 mb-3">
         {STATUS_CARDS.map(c => (

@@ -11,9 +11,10 @@ import OrderDetail from './pages/orders/OrderDetail'
 import EditOrder from './pages/orders/EditOrder'
 import ItemsList from './pages/items/ItemsList'
 import ActivityLog from './pages/activity/ActivityLog'
+import UsersList from './pages/users/UsersList'
 
 export default function App() {
-  const { session, loading } = useAuth()
+  const { session, loading, profile } = useAuth()
 
   if (loading) {
     return (
@@ -38,6 +39,7 @@ export default function App() {
         <Route path="/orders/:id/edit" element={<EditOrder />} />
         <Route path="/items" element={<ItemsList />} />
         <Route path="/activity" element={<ActivityLog />} />
+        <Route path="/users" element={profile?.role === 'admin' ? <UsersList /> : <Navigate to="/" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>

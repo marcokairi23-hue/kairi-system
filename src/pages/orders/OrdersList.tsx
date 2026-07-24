@@ -19,6 +19,7 @@ type ViewMode = 'cards' | 'table'
 
 const TABS: { key: string; label: string; statuses: string[] }[] = [
   { key: 'all',        label: 'כל ההזמנות',   statuses: [] },
+  { key: 'balance',    label: 'יתרה פתוחה',   statuses: [] },
   { key: 'quote',      label: 'הצעות מחיר',   statuses: ['quote'] },
   { key: 'pending',    label: 'ממתין לגבייה', statuses: ['pending_payment'] },
   { key: 'ready',      label: 'חדש לביצוע',   statuses: ['ready'] },
@@ -29,13 +30,41 @@ const TABS: { key: string; label: string; statuses: string[] }[] = [
 
 const VIEW_KEY = 'kairi_orders_view'
 
+const hasOpenBalance = (o: ActionOrder) => {
+  if (o.status === 'completed' || o.status === 'cancelled') return false
+  const paid = (o.payments ?? []).reduce((s, p) => s + p.amount, 0)
+  return o.final_total - paid > 0
+}
+
 export default function OrdersList() {
   const { profile } = useAuth()
-  const [searchParams] = useSearchParams()
+  const [searchParams, setSearchParams] = useSearchParams()
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
-  const [activeTab, setActiveTab] = useState(() => searchParams.get('tab') || 'all')
   const [search, setSearch] = useState('')
+
+  const activeTab = searchParams.get('tab') || 'all'
+  const agentFilter = searchParams.get('agent') || ''
+  const paymentFilter = searchParams.get('payment') || ''
+  const dateFrom = searchParams.get('from') || ''
+  const dateTo = searchParams.get('to') || ''
+
+  const updateParam = (key: string, value: string) => {
+    const next = new URLSearchParams(searchParams)
+    if (value) next.set(key, value)
+    else next.delete(key)
+    setSearchParams(next)
+  }
+
+  const setActiveTab = (v: string) => updateParam('tab', v === 'all' ? '' : v)
+  const clearFilters = () => {
+    const next = new URLSearchParams(searchParams)
+    next.delete('agent')
+    next.delete('payment')
+    next.delete('from')
+    next.delete('to')
+    setSearchParams(next)
+  }
   const [view, setView] = useState<ViewMode>(
     () => (localStorage.getItem(VIEW_KEY) as ViewMode) || 'cards'
   )
@@ -195,10 +224,33 @@ export default function OrdersList() {
     await load()
   }
 
+  const paidOf = (o: ActionOrder) =>
+    (o.payments ?? []).reduce((s, p) => s + p.amount, 0)
+
+  const paymentStatusOf = (o: ActionOrder): 'paid' | 'partial' | 'unpaid' => {
+    const paid = paidOf(o)
+    if (paid <= 0) return 'unpaid'
+    if (paid >= o.final_total) return 'paid'
+    return 'partial'
+  }
+
+  const agentOptions = useMemo(() => {
+    const map = new Map<string, string>()
+    orders.forEach(o => {
+      if (o.agent_id && o.profiles?.full_name) map.set(o.agent_id, o.profiles.full_name)
+    })
+    return Array.from(map, ([id, name]) => ({ id, name }))
+  }, [orders])
+
   const filtered = useMemo(() => {
     const tab = TABS.find(t => t.key === activeTab)!
     let list = orders.filter(o => {
-      if (tab.statuses.length && !tab.statuses.includes(o.status)) return false
+      if (tab.key === 'balance' && !hasOpenBalance(o)) return false
+      if (tab.key !== 'balance' && tab.statuses.length && !tab.statuses.includes(o.status)) return false
+      if (agentFilter && o.agent_id !== agentFilter) return false
+      if (paymentFilter && paymentStatusOf(o) !== paymentFilter) return false
+      if (dateFrom && o.created_at < dateFrom) return false
+      if (dateTo && o.created_at > dateTo + 'T23:59:59') return false
       if (search) {
         const q = search.toLowerCase()
         return (
@@ -230,10 +282,7 @@ export default function OrdersList() {
     }
 
     return list
-  }, [orders, activeTab, search, sortKey, sortAsc, view])
-
-  const paidOf = (o: ActionOrder) =>
-    (o.payments ?? []).reduce((s, p) => s + p.amount, 0)
+  }, [orders, activeTab, agentFilter, paymentFilter, dateFrom, dateTo, search, sortKey, sortAsc, view])
 
   return (
     <div>
@@ -258,6 +307,36 @@ export default function OrdersList() {
              placeholder="חיפוש לפי שם לקוח, טלפון או מספר..."
              value={search} onChange={e => setSearch(e.target.value)} />
 
+      <div className="flex flex-wrap items-center gap-2 mb-4">
+        {agentOptions.length > 1 && (
+          <select className="input w-auto" value={agentFilter}
+                  onChange={e => updateParam('agent', e.target.value)}>
+            <option value="">כל הסוכנים</option>
+            {agentOptions.map(a => (
+              <option key={a.id} value={a.id}>{a.name}</option>
+            ))}
+          </select>
+        )}
+
+        <select className="input w-auto" value={paymentFilter}
+                onChange={e => updateParam('payment', e.target.value)}>
+          <option value="">כל מצבי התשלום</option>
+          <option value="paid">שולם</option>
+          <option value="partial">חלקי</option>
+          <option value="unpaid">לא שולם</option>
+        </select>
+
+        <input type="date" className="input w-auto" value={dateFrom}
+               onChange={e => updateParam('from', e.target.value)} />
+        <span className="text-slate-400 text-sm">עד</span>
+        <input type="date" className="input w-auto" value={dateTo}
+               onChange={e => updateParam('to', e.target.value)} />
+
+        {(agentFilter || paymentFilter || dateFrom || dateTo) && (
+          <button className="btn-ghost text-sm" onClick={clearFilters}>נקה סינון</button>
+        )}
+      </div>
+
       <div className="flex gap-1 overflow-x-auto pb-2 mb-4">
         {TABS.map(t => (
           <button key={t.key} onClick={() => setActiveTab(t.key)}
@@ -268,7 +347,7 @@ export default function OrdersList() {
                   }`}>
             {t.label}
             <span className="mr-1 text-xs opacity-70">
-              ({orders.filter(o => !t.statuses.length || t.statuses.includes(o.status)).length})
+              ({orders.filter(o => t.key === 'balance' ? hasOpenBalance(o) : (!t.statuses.length || t.statuses.includes(o.status))).length})
             </span>
           </button>
         ))}

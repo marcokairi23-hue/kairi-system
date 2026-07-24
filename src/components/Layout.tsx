@@ -12,6 +12,9 @@ const navItems = [
 
 export default function Layout({ children }: { children: ReactNode }) {
   const { profile, signOut } = useAuth()
+  const items = profile?.role === 'admin'
+    ? [...navItems, { to: '/users', label: 'משתמשים' }]
+    : navItems
 
   return (
     <div className="min-h-screen flex flex-col">
@@ -20,7 +23,7 @@ export default function Layout({ children }: { children: ReactNode }) {
           <div className="flex items-center gap-3">
             <span className="font-extrabold text-base tracking-tight">קאירי</span>
             <nav className="flex items-center gap-0.5">
-              {navItems.map((item) => (
+              {items.map((item) => (
                 <NavLink
                   key={item.to} to={item.to} end={item.end}
                   className={({ isActive }) =>

@@ -4,7 +4,7 @@ import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/auth'
 import { printOrder, buildFormFromOrder } from './printOrder'
 import OrderActivityTab from './OrderActivityTab'
-import { getSignatureUrl } from '../../lib/uploadSignature'
+import { getSignatureUrl, getSignatureDataUrl } from '../../lib/uploadSignature'
 import {
   ORDER_STATUS_LABELS, ORDER_STATUS_COLORS, ORDER_STATUS_NEXT,
   ITEM_STATUS_LABELS, ITEM_STATUS_COLORS, SHADING_LABELS, calcProgress,
@@ -87,24 +87,10 @@ export default function OrderDetail() {
     setLoading(false)
     if (data?.signature_url) {
       setSignatureLoading(true)
-      getSignatureUrl(data.signature_url).then(async (url) => {
-        setSignatureImgUrl(url)
-        if (!url) {
-          setSignatureLoading(false)
-          return
-        }
-        try {
-          const blob = await fetch(url).then((r) => r.blob())
-          const reader = new FileReader()
-          reader.onloadend = () => {
-            setSignatureDataUrl(reader.result as string)
-            setSignatureLoading(false)
-          }
-          reader.readAsDataURL(blob)
-        } catch {
-          setSignatureDataUrl(null)
-          setSignatureLoading(false)
-        }
+      getSignatureUrl(data.signature_url).then(setSignatureImgUrl)
+      getSignatureDataUrl(data.signature_url).then((dataUrl) => {
+        setSignatureDataUrl(dataUrl)
+        setSignatureLoading(false)
       })
     }
   }

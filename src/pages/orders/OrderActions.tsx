@@ -1,5 +1,6 @@
 import { useNavigate } from 'react-router-dom'
 import { printOrder, buildFormFromOrder } from './printOrder'
+import { getSignatureDataUrl } from '../../lib/uploadSignature'
 import { ORDER_STATUS_NEXT, ORDER_STATUS_LABELS, SHADING_LABELS, fmt } from '../../lib/statusHelpers'
 
 export interface ActionOrder {
@@ -15,6 +16,8 @@ export interface ActionOrder {
   final_total: number
   send_email: string | null
   signature_name: string | null
+  signature_url: string | null
+  agent_id: string | null
   notes: string | null
   profiles?: { full_name: string }
   order_items?: Array<{
@@ -60,9 +63,12 @@ export default function OrderActions({
 
   const stop = (e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation() }
 
-  const doPrint = (e: React.MouseEvent, withPrices: boolean) => {
+  const doPrint = async (e: React.MouseEvent, withPrices: boolean) => {
     stop(e)
     const form = buildFormFromOrder(order)
+    if (withPrices && order.signature_url) {
+      form.signatureDataUrl = await getSignatureDataUrl(order.signature_url)
+    }
     printOrder(form, orderNum, withPrices)
   }
 

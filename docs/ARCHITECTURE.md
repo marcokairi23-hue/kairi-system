@@ -243,9 +243,9 @@ new (חדש) → cut (נגזר) → sewing (במתפרה) → ready (מוכן) �
 
 זה מיושם היום ב-`OrdersList.tsx`, `OrderDetail.tsx`, `EditOrder.tsx`, `ItemsList.tsx`. (`order_status_history` ו-`payments` יש להם FK יחיד ל-`profiles` — לא צריך FK מפורש שם.)
 
-### 5.3 באג ידוע — הדפסה מרשימת ההזמנות לא מציגה חתימה
+### 5.3 הדפסת חתימה — מנגנון משותף
 
-`OrderActions.tsx` (משמש את `OrdersList.tsx`) קורא ל-`buildFormFromOrder(order)` ומדפיס ישירות, בלי למזג `signatureDataUrl`. רק `OrderDetail.tsx` טוען את תמונת החתימה מה-storage ומוסיף אותה (`printOrder({ ...form, signatureDataUrl }, ...)`). לכן הדפסה מתוך מסך ההזמנה מציגה את החתימה המצוירת, אך הדפסה מהרשימה מציגה לכל היותר את שם החתימה הטקסטואלי (`signature_name`). מתועד גם ב-[WORKPLAN.md](WORKPLAN.md) כפריט פתוח.
+`getSignatureDataUrl(path)` ב-`src/lib/uploadSignature.ts` ממיר `signature_url` (path בסטורג') ל-dataURL (signed URL → fetch → FileReader), ומשמש גם את `OrderDetail.tsx` וגם את `OrderActions.tsx` (`doPrint`, לפני קריאה ל-`printOrder`, רק בהדפסה עם מחירים). כך הדפסה מציגה את החתימה המצוירת גם מתוך מסך ההזמנה וגם מרשימת ההזמנות.
 
 ### 5.4 תזכורות תפעוליות
 

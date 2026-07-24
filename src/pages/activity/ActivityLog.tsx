@@ -45,7 +45,7 @@ function describe(row: ActivityRow): string {
   return row.note || `→ ${ORDER_STATUS_LABELS[row.to_status] ?? row.to_status}`
 }
 
-function dayLabel(iso: string): string {
+export function dayLabel(iso: string): string {
   return new Date(iso).toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit', year: 'numeric' })
 }
 
@@ -114,7 +114,9 @@ export function ActivityRowLine({ row, showOrderNumber = true }: { row: Activity
   return (
     <div className="flex items-center gap-3 py-2 text-sm border-b border-slate-100 last:border-0">
       <span className="text-slate-400 w-12 shrink-0">{timeLabel(row.changed_at)}</span>
-      <span className="w-24 shrink-0 font-medium">{row.profiles?.full_name ?? '—'}</span>
+      <span className="w-24 shrink-0 font-medium truncate" title={row.profiles?.full_name ?? undefined}>
+        {row.profiles?.full_name ?? '—'}
+      </span>
       <span className="flex-1">{describe(row)}</span>
       {showOrderNumber && row.orders?.order_number && (
         <Link to={`/orders/${row.order_id}`} className="text-brand shrink-0">

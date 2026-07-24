@@ -32,3 +32,20 @@ export async function getSignatureUrl(path: string): Promise<string | null> {
 
   return data.signedUrl
 }
+
+export async function getSignatureDataUrl(path: string): Promise<string | null> {
+  const url = await getSignatureUrl(path)
+  if (!url) return null
+
+  try {
+    const blob = await fetch(url).then((r) => r.blob())
+    return await new Promise<string>((resolve, reject) => {
+      const reader = new FileReader()
+      reader.onloadend = () => resolve(reader.result as string)
+      reader.onerror = reject
+      reader.readAsDataURL(blob)
+    })
+  } catch {
+    return null
+  }
+}
