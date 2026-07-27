@@ -79,6 +79,8 @@ export default function OrderDetail() {
   const [tab, setTab] = useState<'details' | 'activity'>('details')
   const [sharingPdf, setSharingPdf] = useState(false)
   const [shareError, setShareError] = useState<string | null>(null)
+  const [sendingMake, setSendingMake] = useState(false)
+  const [makeResult, setMakeResult] = useState<'ok' | 'error' | null>(null)
 
   const load = async () => {
     const { data } = await supabase
@@ -190,6 +192,35 @@ export default function OrderDetail() {
     }
   }
 
+  // גישה 3: שליחה צד-שרת דרך Make.com + ManyChat — בלי לפתוח וואטסאפ בכלל
+  const sendPdfViaMake = async () => {
+    if (!order.pdf_url) return
+    const webhookUrl = import.meta.env.VITE_MAKE_WEBHOOK_URL
+    if (!webhookUrl) {
+      setMakeResult('error')
+      return
+    }
+    setSendingMake(true); setMakeResult(null)
+    try {
+      const phone = order.phone_snapshot.replace(/\D/g, '').replace(/^0/, '972')
+      const res = await fetch(webhookUrl, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          phone,
+          customer_name: order.customer_name_snapshot,
+          order_number: orderNum,
+          pdf_url: order.pdf_url,
+        }),
+      })
+      setMakeResult(res.ok ? 'ok' : 'error')
+    } catch {
+      setMakeResult('error')
+    } finally {
+      setSendingMake(false)
+    }
+  }
+
   return (
     <div className="max-w-2xl mx-auto pb-10">
       <div className="flex items-center justify-between mb-4">
@@ -298,16 +329,21 @@ export default function OrderDetail() {
             </button>
           </div>
 
-          <div className="text-xs font-bold text-slate-500 mb-2">שליחת PDF ללקוח — בדיקת 2 שיטות</div>
-          <div className="grid grid-cols-2 gap-2">
+          <div className="text-xs font-bold text-slate-500 mb-2">שליחת PDF ללקוח — בדיקת 3 שיטות</div>
+          <div className="grid grid-cols-3 gap-2">
             <button className="btn-ghost text-sm" onClick={sendPdfLinkWhatsApp}>
               💬 שיטה 1: קישור ב-WhatsApp
             </button>
             <button className="btn-ghost text-sm" disabled={sharingPdf} onClick={sharePdfFile}>
               {sharingPdf ? 'טוען...' : '📤 שיטה 2: שיתוף קובץ'}
             </button>
+            <button className="btn-ghost text-sm" disabled={sendingMake} onClick={sendPdfViaMake}>
+              {sendingMake ? 'שולח...' : '📨 שיטה 3: Make/ManyChat'}
+            </button>
           </div>
           {shareError && <div className="text-red-600 text-xs mt-2">{shareError}</div>}
+          {makeResult === 'ok' && <div className="text-green-700 text-xs mt-2">נשלח ל-Make בהצלחה — בדוק ב-Execution history / בוואטסאפ של הלקוח.</div>}
+          {makeResult === 'error' && <div className="text-red-600 text-xs mt-2">שגיאה בשליחה ל-Make. בדוק את VITE_MAKE_WEBHOOK_URL וש-.env.local נטען (הפעל מחדש את שרת ה-dev אם שינית עכשיו).</div>}
         </div>
       )}
 
