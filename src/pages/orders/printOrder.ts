@@ -5,7 +5,9 @@ const SHADING_LABELS: Record<string, string> = {
   zebra: 'זברה', venetian: 'ונציאני', roman: 'רומי', roller: 'גלילה',
 }
 
-export function printOrder(form: OrderForm, orderNumber: string | number, showPrices: boolean) {
+// בונה את מסמך ה-HTML של ההזמנה (בלי סקריפט הדפסה אוטומטית) — משמש גם את
+// printOrder (הדפסה בדפדפן) וגם את generateOrderPdf (צילום ל-PDF, ראו lib/generateOrderPdf.ts)
+export function buildOrderHtml(form: OrderForm, orderNumber: string | number, showPrices: boolean): string {
   const itemsTotal = calcItemsTotal(form)
   const remaining = calcRemaining(form)
   const title = showPrices ? 'הזמנה / הצעת מחיר' : 'הוראות עבודה'
@@ -177,9 +179,15 @@ export function printOrder(form: OrderForm, orderNumber: string | number, showPr
     <div class="sig-line">חתימת הסוכן</div>
   </div>` : ''}
 </div>
-<script>window.onload = () => window.print()</script>
 </body>
 </html>`
+
+  return html
+}
+
+export function printOrder(form: OrderForm, orderNumber: string | number, showPrices: boolean) {
+  const html = buildOrderHtml(form, orderNumber, showPrices)
+    .replace('</body>', '<script>window.onload = () => window.print()</script></body>')
 
   const blob = new Blob([html], { type: 'text/html;charset=utf-8' })
   const url = URL.createObjectURL(blob)
