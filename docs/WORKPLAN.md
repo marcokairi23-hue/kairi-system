@@ -152,7 +152,11 @@
 
 #### שלב 15ב — אחסון ל-PDF שנוצר
 
-קבצים: `supabase/migrations/0004_order_pdfs_bucket.sql` (חדש) — bucket ציבורי `order-pdfs` + מדיניות RLS ל-`storage.objects` (אותו דפוס כמו התיקון ל-`fabric-images`, §6.1), `src/lib/uploadOrderPdf.ts` (חדש) — מבוסס על `uploadSignature.ts`.
+#### שלב 15ב — אחסון ל-PDF שנוצר 🟡 קוד מוכן, מיגרציה טרם הורצה על ה-DB החי (2026-07-27)
+
+קבצים: `supabase/migrations/0004_order_pdfs_bucket.sql` (חדש) — bucket ציבורי `order-pdfs` + מדיניות RLS ל-`storage.objects` (אותו דפוס כמו התיקון ל-`fabric-images`, §6.1), `src/lib/uploadOrderPdf.ts` (חדש) — מבוסס על `uploadSignature.ts`, אבל מחזיר URL ציבורי (`getPublicUrl`) ולא signed URL, כי הבאקט ציבורי.
+
+⚠️ **חיבור ה-MCP ל-Supabase התנתק** באמצע השיחה (לא ידוע למה) — לא ניתן היה להריץ את המיגרציה ישירות על הפרויקט החי כמו בפעמים הקודמות. **צריך להריץ ידנית** ב-Supabase Dashboard → SQL Editor לפני שהעלאת PDF תעבוד בפועל. ניסיון לחבר מחדש דרך `claude mcp add` נכשל — הבינארי `claude` לא זמין בסביבת ה-shell של הסשן הזה; החיבור המקורי היה אינטגרציה מנוהלת של claude.ai, לא תלוי-CLI. בהמתנה לבירור/חידוש החיבור.
 
 #### שלב 15ג — חיווט ב-UI
 
