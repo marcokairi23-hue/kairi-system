@@ -15,6 +15,8 @@ import ShadingCard from './ShadingCard'
 import { printOrder, buildFormFromOrder } from './printOrder'
 import SignaturePad from '../../components/SignaturePad'
 import { uploadSignature, getSignatureUrl } from '../../lib/uploadSignature'
+import { generateOrderPdf } from '../../lib/generateOrderPdf'
+import { uploadOrderPdf } from '../../lib/uploadOrderPdf'
 
 export default function EditOrder() {
   const { id } = useParams()
@@ -149,6 +151,15 @@ export default function EditOrder() {
             sort_order: idx,
           }))
         )
+      }
+
+      // הפקת PDF מחדש והחלפת הקובץ הקיים ב-Storage (נתיב קבוע לפי מזהה ההזמנה)
+      try {
+        const pdfBlob = await generateOrderPdf(form, orderNumber, true)
+        const pdfUrl = await uploadOrderPdf(id!, pdfBlob)
+        await supabase.from('orders').update({ pdf_url: pdfUrl }).eq('id', id)
+      } catch (pdfErr) {
+        console.error('שגיאה בהפקת/העלאת PDF ההזמנה:', pdfErr)
       }
 
       if (!signatureUploadFailed) {

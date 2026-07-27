@@ -15,6 +15,8 @@ import ShadingCard from './ShadingCard'
 import { printOrder } from './printOrder'
 import SignaturePad from '../../components/SignaturePad'
 import { uploadSignature } from '../../lib/uploadSignature'
+import { generateOrderPdf } from '../../lib/generateOrderPdf'
+import { uploadOrderPdf } from '../../lib/uploadOrderPdf'
 
 export default function NewOrder() {
   const { profile } = useAuth()
@@ -92,7 +94,8 @@ export default function NewOrder() {
       if (oe) throw oe
 
       // הקצאת מספר הזמנה
-      await supabase.rpc('allocate_order_number', { p_order_id: order.id })
+      const { data: allocatedNumber } = await supabase
+        .rpc('allocate_order_number', { p_order_id: order.id })
 
       // העלאת חתימה (לא חוסמת את שמירת ההזמנה בכישלון)
       let signatureUploadFailed = false
@@ -149,6 +152,15 @@ export default function NewOrder() {
             sort_order: idx,
           }))
         )
+      }
+
+      // הפקת PDF והעלאה ל-Storage (לא חוסמת את שמירת ההזמנה בכישלון)
+      try {
+        const pdfBlob = await generateOrderPdf(form, allocatedNumber ?? 'טיוטה', true)
+        const pdfUrl = await uploadOrderPdf(order.id, pdfBlob)
+        await supabase.from('orders').update({ pdf_url: pdfUrl }).eq('id', order.id)
+      } catch (pdfErr) {
+        console.error('שגיאה בהפקת/העלאת PDF ההזמנה:', pdfErr)
       }
 
       // תשלום ראשוני

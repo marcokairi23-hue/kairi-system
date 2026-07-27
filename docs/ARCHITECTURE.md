@@ -79,7 +79,10 @@ supabase/
 ├── migrations/
 │   ├── 0001_initial_schema.sql
 │   ├── 0002_ready_status_and_item_timestamps.sql
-│   └── 0003_fabric_images_storage_policies.sql
+│   ├── 0003_fabric_images_storage_policies.sql
+│   ├── 0004_order_pdfs_bucket.sql
+│   ├── 0005_order_pdf_url.sql
+│   └── 0006_storage_select_policies_fix.sql
 └── functions/
     ├── create-user/          # Edge Function — יצירת משתמש חדש עם service_role, ראו §6
     │   └── index.ts
@@ -273,8 +276,10 @@ new (חדש) → cut (נגזר) → sewing (במתפרה) → ready (מוכן) �
 
 עדכון קוד לפונקציה קיימת דורש `deploy_edge_function` מחדש (יוצר גרסה חדשה) — אין hot-reload מקומי כמו ב-Cloudflare Pages.
 
-### 6.1 Storage — באג העלאת תמונות בדים (תוקן 2026-07-24)
+### 6.1 Storage — באג העלאת תמונות בדים (תוקן 2026-07-24, תיקון שני 2026-07-27)
 
 `fabric-images` (`FabricForm.tsx`) היה `public: true` אבל **בלי אף מדיניות RLS על `storage.objects`** — העלאה (INSERT) נכשלה בשקט כי public משפיע רק על קריאה. תוקן ב-`0003_fabric_images_storage_policies.sql`: INSERT/UPDATE/DELETE מוגבל ל-`admin`/`office` (תואם `office_fabric_images` על טבלת ה-DB). נפרס ישירות דרך `apply_migration` ב-MCP. ראו גם §3.3 לעיל.
+
+⚠️ **התיקון היה חלקי — נשאר שבור בפועל עד 2026-07-27:** `0003` (וגם `0004` ל-`order-pdfs`, ראו WORKPLAN שלב 15ב) הגדירו רק INSERT/UPDATE/DELETE, בלי **SELECT**. Storage API מבצע `INSERT...RETURNING *` בכל העלאה — בלי מדיניות SELECT שמכסה את השורה החדשה, ה-`RETURNING` נכשל וה-API מחזיר "new row violates row-level security policy" **גם כשה-INSERT עצמו הותר במלואו** (מתועד רשמית: [Supabase troubleshooting guide](https://supabase.com/docs/guides/troubleshooting/storage-error-403-forbidden-new-row-violates-row-level-security-policy-on-upload-a94384)). אובחן ע"י בדיקה אמפירית: bucket `documents` (עם מדיניות SELECT) עבד, בעוד באקטים חדשים לגמרי עם אותה בדיוק מדיניות INSERT (`bucket_id = 'x' and auth.uid() is not null`, ללא שום תלות ב-`current_role()`) נכשלו עקבית — כולל bucket בדיקה נקי. תוקן ב-`0006_storage_select_policies_fix.sql`: נוספו `office_order_pdfs_select` ו-`office_fabric_images_select`. אומת בפועל ב-2 הבאקטים (upload ישיר דרך fetch גולמי, לא רק דרך supabase-js).
 
 **כיווץ תמונות:** כרגע `FabricForm.tsx` מעלה את קובץ ה-`File` המקורי כמו שהוא — בלי שינוי גודל/דחיסה בצד הלקוח. אין היום שום מנגנון "תמונה קטנה לרשימה + מקור מלא בפתיחה". זה שיפור עתידי אפשרי (resize ל-canvas לפני העלאה) — לא בוצע.

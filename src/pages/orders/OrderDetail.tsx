@@ -55,6 +55,7 @@ interface Order {
   send_email: string | null
   signature_name: string | null
   signature_url: string | null
+  pdf_url: string | null
   notes: string | null
   created_at: string
   profiles?: { full_name: string }
@@ -76,6 +77,8 @@ export default function OrderDetail() {
   const [updatingStatus, setUpdatingStatus] = useState(false)
   const [showCancelConfirm, setShowCancelConfirm] = useState(false)
   const [tab, setTab] = useState<'details' | 'activity'>('details')
+  const [sharingPdf, setSharingPdf] = useState(false)
+  const [shareError, setShareError] = useState<string | null>(null)
 
   const load = async () => {
     const { data } = await supabase
@@ -149,6 +152,42 @@ export default function OrderDetail() {
     ].join('\n')
     const text = `שלום ${order.customer_name_snapshot} 😊\nהזמנה מספר #${orderNum} מקאירי וילונות:\n\n${items}\n\nסה״כ לתשלום: ₪${order.final_total.toLocaleString()}\n${paid > 0 ? `שולם: ₪${paid.toLocaleString()}\nנשאר: ₪${remaining.toLocaleString()}` : ''}\n\nתודה! 🙏`
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, '_blank')
+  }
+
+  // גישה 1: קישור PDF בתוך הודעת WhatsApp טקסטואלית (wa.me) — נפתח ישירות לצ'אט של הלקוח
+  const sendPdfLinkWhatsApp = () => {
+    if (!order.pdf_url) return
+    const phone = order.phone_snapshot.replace(/\D/g, '').replace(/^0/, '972')
+    const text = `שלום ${order.customer_name_snapshot} 😊\nהנה טופס הזמנה מספר #${orderNum} מקאירי וילונות:\n${order.pdf_url}`
+    window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, '_blank')
+  }
+
+  // גישה 2: שיתוף הקובץ עצמו דרך Web Share API — פותח את תפריט השיתוף הטבעי של המכשיר
+  const sharePdfFile = async () => {
+    if (!order.pdf_url) return
+    setSharingPdf(true); setShareError(null)
+    try {
+      const res = await fetch(order.pdf_url)
+      const blob = await res.blob()
+      const file = new File([blob], `הזמנה-${orderNum}.pdf`, { type: 'application/pdf' })
+      if (navigator.canShare && navigator.canShare({ files: [file] })) {
+        await navigator.share({
+          files: [file],
+          title: `הזמנה #${orderNum}`,
+          text: `טופס הזמנה עבור ${order.customer_name_snapshot}`,
+        })
+      } else {
+        setShareError('שיתוף קבצים לא נתמך בדפדפן/מכשיר הזה. נסה מהטלפון (Chrome או Safari).')
+      }
+    } catch (err) {
+      if (err instanceof Error && err.name === 'AbortError') {
+        // המשתמש ביטל את תיבת השיתוף — לא שגיאה אמיתית
+      } else {
+        setShareError('שגיאה בשיתוף הקובץ: ' + (err instanceof Error ? err.message : String(err)))
+      }
+    } finally {
+      setSharingPdf(false)
+    }
   }
 
   return (
@@ -240,6 +279,37 @@ export default function OrderDetail() {
         <a href={`tel:${order.phone_snapshot}`} className="text-brand text-sm font-medium">{order.phone_snapshot}</a>
         {order.address_snapshot && <div className="text-slate-500 text-sm mt-1">{order.address_snapshot}</div>}
       </div>
+
+      {/* קישור PDF ציבורי */}
+      {order.pdf_url && (
+        <div className="card p-4 mb-3">
+          <div className="flex items-center justify-between gap-3 mb-3">
+            <div className="text-sm min-w-0">
+              <div className="text-xs font-bold text-slate-500 mb-1">PDF ציבורי של ההזמנה</div>
+              <a href={order.pdf_url} target="_blank" rel="noreferrer" className="text-brand underline break-all">
+                {order.pdf_url}
+              </a>
+            </div>
+            <button
+              className="btn-ghost text-sm shrink-0"
+              onClick={() => navigator.clipboard.writeText(order.pdf_url!)}
+            >
+              העתק קישור
+            </button>
+          </div>
+
+          <div className="text-xs font-bold text-slate-500 mb-2">שליחת PDF ללקוח — בדיקת 2 שיטות</div>
+          <div className="grid grid-cols-2 gap-2">
+            <button className="btn-ghost text-sm" onClick={sendPdfLinkWhatsApp}>
+              💬 שיטה 1: קישור ב-WhatsApp
+            </button>
+            <button className="btn-ghost text-sm" disabled={sharingPdf} onClick={sharePdfFile}>
+              {sharingPdf ? 'טוען...' : '📤 שיטה 2: שיתוף קובץ'}
+            </button>
+          </div>
+          {shareError && <div className="text-red-600 text-xs mt-2">{shareError}</div>}
+        </div>
+      )}
 
       {/* פס התקדמות */}
       {prog.total > 0 && (

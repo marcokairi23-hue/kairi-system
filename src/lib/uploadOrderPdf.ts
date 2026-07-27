@@ -1,7 +1,7 @@
 import { supabase } from './supabase'
 
 export async function uploadOrderPdf(orderId: string, pdfBlob: Blob): Promise<string> {
-  const path = `${orderId}/${Date.now()}.pdf`
+  const path = `${orderId}.pdf`
 
   const { error } = await supabase.storage
     .from('order-pdfs')
