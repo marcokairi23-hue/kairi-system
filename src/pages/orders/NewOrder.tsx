@@ -13,7 +13,6 @@ import { Field, SummaryBox, BlockHeader } from './FormFields'
 import CurtainCard from './CurtainCard'
 import ShadingCard from './ShadingCard'
 import { printOrder } from './printOrder'
-import SignaturePad from '../../components/SignaturePad'
 import SignatureModal from '../../components/SignatureModal'
 import { uploadSignature } from '../../lib/uploadSignature'
 import { generateOrderPdf } from '../../lib/generateOrderPdf'
@@ -27,6 +26,7 @@ export default function NewOrder() {
   const [error, setError] = useState<string | null>(null)
   const [showDialog, setShowDialog] = useState(false)
   const [createdOrderId, setCreatedOrderId] = useState<string | null>(null)
+  const [customerSigOpen, setCustomerSigOpen] = useState(false)
   const [agentSigOpen, setAgentSigOpen] = useState(false)
 
   const setF = (k: keyof OrderForm, v: unknown) => setForm(f => ({ ...f, [k]: v }))
@@ -407,12 +407,17 @@ export default function NewOrder() {
                    placeholder="הקלד שם לחתימה או השאר ריק" />
           </Field>
 
-          <Field label="חתימה (ציור)">
-            <SignaturePad
-              value={form.signatureDataUrl}
-              onChange={dataUrl => setF('signatureDataUrl', dataUrl)}
-              disabled={busy}
-            />
+          <Field label="חתימת לקוח">
+            <div className="flex items-center gap-3">
+              {form.signatureDataUrl ? (
+                <img src={form.signatureDataUrl} alt="חתימת לקוח" className="h-16 rounded border" />
+              ) : (
+                <span className="text-sm text-slate-400">אין חתימה</span>
+              )}
+              <button type="button" className="btn-ghost text-sm" onClick={() => setCustomerSigOpen(true)}>
+                ✍️ חתימה
+              </button>
+            </div>
           </Field>
 
           <Field label="חתימת סוכן">
@@ -429,6 +434,14 @@ export default function NewOrder() {
           </Field>
         </div>
       </div>
+
+      <SignatureModal
+        open={customerSigOpen}
+        title="חתימת לקוח"
+        value={form.signatureDataUrl}
+        onSave={dataUrl => setF('signatureDataUrl', dataUrl)}
+        onClose={() => setCustomerSigOpen(false)}
+      />
 
       <SignatureModal
         open={agentSigOpen}

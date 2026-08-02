@@ -13,7 +13,6 @@ import { Field, SummaryBox, BlockHeader } from './FormFields'
 import CurtainCard from './CurtainCard'
 import ShadingCard from './ShadingCard'
 import { printOrder, buildFormFromOrder } from './printOrder'
-import SignaturePad from '../../components/SignaturePad'
 import SignatureModal from '../../components/SignatureModal'
 import { uploadSignature, getSignatureUrl } from '../../lib/uploadSignature'
 
@@ -29,6 +28,7 @@ export default function EditOrder() {
   const [existingSignatureUrl, setExistingSignatureUrl] = useState<string | null>(null)
   const [signatureCleared, setSignatureCleared] = useState(false)
   const [existingAgentSignatureUrl, setExistingAgentSignatureUrl] = useState<string | null>(null)
+  const [customerSigOpen, setCustomerSigOpen] = useState(false)
   const [agentSigOpen, setAgentSigOpen] = useState(false)
 
   useEffect(() => {
@@ -344,20 +344,21 @@ export default function EditOrder() {
                    onChange={e => setF('signature_name', e.target.value)} />
           </Field>
 
-          <Field label="חתימת לקוח (ציור)">
-            <SignaturePad
-              value={form.signatureDataUrl ?? existingSignatureUrl}
-              onChange={dataUrl => {
-                setF('signatureDataUrl', dataUrl)
-                if (dataUrl === null) {
-                  setSignatureCleared(true)
-                  setExistingSignatureUrl(null)
-                } else {
-                  setSignatureCleared(false)
-                }
-              }}
-              disabled={busy}
-            />
+          <Field label="חתימת לקוח">
+            <div className="flex items-center gap-3">
+              {(form.signatureDataUrl ?? existingSignatureUrl) ? (
+                <img
+                  src={form.signatureDataUrl ?? existingSignatureUrl ?? ''}
+                  alt="חתימת לקוח"
+                  className="h-16 rounded border"
+                />
+              ) : (
+                <span className="text-sm text-slate-400">אין חתימה</span>
+              )}
+              <button type="button" className="btn-ghost text-sm" disabled={busy} onClick={() => setCustomerSigOpen(true)}>
+                ✍️ חתימה
+              </button>
+            </div>
           </Field>
 
           <Field label="חתימת סוכן">
@@ -378,6 +379,18 @@ export default function EditOrder() {
           </Field>
         </div>
       </div>
+
+      <SignatureModal
+        open={customerSigOpen}
+        title="חתימת לקוח"
+        value={form.signatureDataUrl ?? existingSignatureUrl}
+        onSave={dataUrl => {
+          setF('signatureDataUrl', dataUrl)
+          setSignatureCleared(dataUrl === null)
+          if (dataUrl !== null) setExistingSignatureUrl(null)
+        }}
+        onClose={() => setCustomerSigOpen(false)}
+      />
 
       <SignatureModal
         open={agentSigOpen}
