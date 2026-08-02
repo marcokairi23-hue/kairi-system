@@ -5,6 +5,8 @@ import { useAuth } from '../../lib/auth'
 import { printOrder, buildFormFromOrder } from './printOrder'
 import OrderActivityTab from './OrderActivityTab'
 import { getSignatureUrl, getSignatureDataUrl } from '../../lib/uploadSignature'
+import { generateOrderPdf } from '../../lib/generateOrderPdf'
+import { uploadOrderPdf } from '../../lib/uploadOrderPdf'
 import {
   ORDER_STATUS_LABELS, ORDER_STATUS_COLORS, ORDER_STATUS_NEXT,
   ITEM_STATUS_LABELS, ITEM_STATUS_COLORS, SHADING_LABELS, calcProgress,
@@ -56,6 +58,7 @@ interface Order {
   signature_name: string | null
   signature_url: string | null
   pdf_url: string | null
+  pdf_url_original: string | null
   notes: string | null
   created_at: string
   profiles?: { full_name: string }
@@ -81,6 +84,8 @@ export default function OrderDetail() {
   const [shareError, setShareError] = useState<string | null>(null)
   const [sendingMake, setSendingMake] = useState(false)
   const [makeResult, setMakeResult] = useState<'ok' | 'error' | null>(null)
+  const [syncingPdf, setSyncingPdf] = useState(false)
+  const [syncError, setSyncError] = useState<string | null>(null)
 
   const load = async () => {
     const { data } = await supabase
@@ -154,6 +159,21 @@ export default function OrderDetail() {
     ].join('\n')
     const text = `שלום ${order.customer_name_snapshot} 😊\nהזמנה מספר #${orderNum} מקאירי וילונות:\n\n${items}\n\nסה״כ לתשלום: ₪${order.final_total.toLocaleString()}\n${paid > 0 ? `שולם: ₪${paid.toLocaleString()}\nנשאר: ₪${remaining.toLocaleString()}` : ''}\n\nתודה! 🙏`
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, '_blank')
+  }
+
+  // כפתור זמני: מפיק PDF טרי מהנתונים הנוכחיים ומחליף את הקובץ בקישור הקיים (pdf_url) — אין הפקה אוטומטית יותר בעריכה
+  const syncPdf = async () => {
+    setSyncingPdf(true); setSyncError(null)
+    try {
+      const pdfBlob = await generateOrderPdf(form, orderNum, true)
+      const pdfUrl = await uploadOrderPdf(id!, pdfBlob)
+      await supabase.from('orders').update({ pdf_url: pdfUrl }).eq('id', id)
+      await load()
+    } catch (err) {
+      setSyncError('שגיאה בסנכרון ה-PDF: ' + (err instanceof Error ? err.message : String(err)))
+    } finally {
+      setSyncingPdf(false)
+    }
   }
 
   // גישה 1: קישור PDF בתוך הודעת WhatsApp טקסטואלית (wa.me) — נפתח ישירות לצ'אט של הלקוח
@@ -314,20 +334,47 @@ export default function OrderDetail() {
       {/* קישור PDF ציבורי */}
       {order.pdf_url && (
         <div className="card p-4 mb-3">
+          {order.pdf_url_original && (
+            <div className="flex items-center justify-between gap-3 mb-3 pb-3 border-b border-slate-100">
+              <div className="text-sm min-w-0">
+                <div className="text-xs font-bold text-slate-500 mb-1">PDF מקור (קפוא לצמיתות)</div>
+                <a href={order.pdf_url_original} target="_blank" rel="noreferrer" className="text-brand underline break-all">
+                  {order.pdf_url_original}
+                </a>
+              </div>
+              <button
+                className="btn-ghost text-sm shrink-0"
+                onClick={() => navigator.clipboard.writeText(order.pdf_url_original!)}
+              >
+                העתק קישור
+              </button>
+            </div>
+          )}
           <div className="flex items-center justify-between gap-3 mb-3">
             <div className="text-sm min-w-0">
-              <div className="text-xs font-bold text-slate-500 mb-1">PDF ציבורי של ההזמנה</div>
+              <div className="text-xs font-bold text-slate-500 mb-1">PDF חי (מסונכרן)</div>
               <a href={order.pdf_url} target="_blank" rel="noreferrer" className="text-brand underline break-all">
                 {order.pdf_url}
               </a>
             </div>
-            <button
-              className="btn-ghost text-sm shrink-0"
-              onClick={() => navigator.clipboard.writeText(order.pdf_url!)}
-            >
-              העתק קישור
-            </button>
+            <div className="flex gap-2 shrink-0">
+              <button
+                className="btn-ghost text-sm"
+                disabled={syncingPdf}
+                onClick={syncPdf}
+                title="מפיק PDF טרי מהנתונים הנוכחיים של ההזמנה ומחליף את הקובץ בקישור הקיים"
+              >
+                {syncingPdf ? 'מסנכרן...' : '🔄 סנכרן PDF'}
+              </button>
+              <button
+                className="btn-ghost text-sm"
+                onClick={() => navigator.clipboard.writeText(order.pdf_url!)}
+              >
+                העתק קישור
+              </button>
+            </div>
           </div>
+          {syncError && <div className="text-red-600 text-xs mb-3">{syncError}</div>}
 
           <div className="text-xs font-bold text-slate-500 mb-2">שליחת PDF ללקוח — בדיקת 3 שיטות</div>
           <div className="grid grid-cols-3 gap-2">

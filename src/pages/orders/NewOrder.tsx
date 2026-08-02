@@ -158,7 +158,8 @@ export default function NewOrder() {
       try {
         const pdfBlob = await generateOrderPdf(form, allocatedNumber ?? 'טיוטה', true)
         const pdfUrl = await uploadOrderPdf(order.id, pdfBlob)
-        await supabase.from('orders').update({ pdf_url: pdfUrl }).eq('id', order.id)
+        const pdfUrlOriginal = await uploadOrderPdf(order.id, pdfBlob, true)
+        await supabase.from('orders').update({ pdf_url: pdfUrl, pdf_url_original: pdfUrlOriginal }).eq('id', order.id)
       } catch (pdfErr) {
         console.error('שגיאה בהפקת/העלאת PDF ההזמנה:', pdfErr)
       }
