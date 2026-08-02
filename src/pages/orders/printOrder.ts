@@ -176,7 +176,11 @@ export function buildOrderHtml(form: OrderForm, orderNumber: string | number, sh
         ? `<img src="${form.signatureDataUrl}" alt="חתימה" style="height:80px;max-width:180px;object-fit:contain;display:block;margin:0 auto 4px" />`
         : (form.signature_name || '')
     }<br/>חתימת הלקוח</div>
-    <div class="sig-line">חתימת הסוכן</div>
+    <div class="sig-line">${
+      form.agentSignatureDataUrl
+        ? `<img src="${form.agentSignatureDataUrl}" alt="חתימת סוכן" style="height:80px;max-width:180px;object-fit:contain;display:block;margin:0 auto 4px" />`
+        : ''
+    }<br/>חתימת הסוכן</div>
   </div>` : ''}
 </div>
 </body>

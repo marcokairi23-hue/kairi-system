@@ -17,6 +17,7 @@ export interface ActionOrder {
   send_email: string | null
   signature_name: string | null
   signature_url: string | null
+  agent_signature_url: string | null
   agent_id: string | null
   notes: string | null
   profiles?: { full_name: string }
@@ -68,6 +69,9 @@ export default function OrderActions({
     const form = buildFormFromOrder(order)
     if (withPrices && order.signature_url) {
       form.signatureDataUrl = await getSignatureDataUrl(order.signature_url)
+    }
+    if (withPrices && order.agent_signature_url) {
+      form.agentSignatureDataUrl = await getSignatureDataUrl(order.agent_signature_url)
     }
     printOrder(form, orderNum, withPrices)
   }

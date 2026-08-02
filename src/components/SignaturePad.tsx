@@ -4,11 +4,12 @@ interface SignaturePadProps {
   value?: string | null; // dataURL או path קיים
   onChange: (dataUrl: string | null) => void;
   disabled?: boolean;
+  hideActions?: boolean; // מדלג על כפתורי "נקה"/"חתום מחדש" הפנימיים (למשל בתוך מודאל שמספק כפתורים משלו)
 }
 
 const HEIGHT = 180;
 
-export default function SignaturePad({ value, onChange, disabled }: SignaturePadProps) {
+export default function SignaturePad({ value, onChange, disabled, hideActions }: SignaturePadProps) {
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const drawingRef = useRef(false);
   const lastPointRef = useRef<{ x: number; y: number } | null>(null);
@@ -121,7 +122,7 @@ export default function SignaturePad({ value, onChange, disabled }: SignaturePad
         >
           <img src={value} alt="חתימה" className="max-h-full max-w-full object-contain" />
         </div>
-        {!disabled && (
+        {!disabled && !hideActions && (
           <button type="button" onClick={handleResign} className="btn-ghost">
             חתום מחדש
           </button>
@@ -141,7 +142,7 @@ export default function SignaturePad({ value, onChange, disabled }: SignaturePad
         onPointerUp={handlePointerUp}
         onPointerCancel={handlePointerUp}
       />
-      {!disabled && (
+      {!disabled && !hideActions && (
         <button type="button" onClick={handleClear} className="btn-ghost">
           נקה
         </button>

@@ -14,6 +14,7 @@ import CurtainCard from './CurtainCard'
 import ShadingCard from './ShadingCard'
 import { printOrder } from './printOrder'
 import SignaturePad from '../../components/SignaturePad'
+import SignatureModal from '../../components/SignatureModal'
 import { uploadSignature } from '../../lib/uploadSignature'
 import { generateOrderPdf } from '../../lib/generateOrderPdf'
 import { uploadOrderPdf } from '../../lib/uploadOrderPdf'
@@ -26,6 +27,7 @@ export default function NewOrder() {
   const [error, setError] = useState<string | null>(null)
   const [showDialog, setShowDialog] = useState(false)
   const [createdOrderId, setCreatedOrderId] = useState<string | null>(null)
+  const [agentSigOpen, setAgentSigOpen] = useState(false)
 
   const setF = (k: keyof OrderForm, v: unknown) => setForm(f => ({ ...f, [k]: v }))
 
@@ -97,14 +99,23 @@ export default function NewOrder() {
       const { data: allocatedNumber } = await supabase
         .rpc('allocate_order_number', { p_order_id: order.id })
 
-      // העלאת חתימה (לא חוסמת את שמירת ההזמנה בכישלון)
+      // העלאת חתימות (לא חוסמת את שמירת ההזמנה בכישלון)
       let signatureUploadFailed = false
       if (form.signatureDataUrl) {
         try {
           const path = await uploadSignature(order.id, form.signatureDataUrl)
           await supabase.from('orders').update({ signature_url: path }).eq('id', order.id)
         } catch (sigErr) {
-          console.error('שגיאה בהעלאת חתימה:', sigErr)
+          console.error('שגיאה בהעלאת חתימת לקוח:', sigErr)
+          signatureUploadFailed = true
+        }
+      }
+      if (form.agentSignatureDataUrl) {
+        try {
+          const path = await uploadSignature(order.id, form.agentSignatureDataUrl, 'agent')
+          await supabase.from('orders').update({ agent_signature_url: path }).eq('id', order.id)
+        } catch (sigErr) {
+          console.error('שגיאה בהעלאת חתימת סוכן:', sigErr)
           signatureUploadFailed = true
         }
       }
@@ -184,7 +195,7 @@ export default function NewOrder() {
 
       if (signatureUploadFailed) {
         setCreatedOrderId(order.id)
-        setError('ההזמנה נשמרה אך החתימה לא הועלתה. אפשר להשלים אותה במסך עריכת ההזמנה.')
+        setError('ההזמנה נשמרה אך אחת החתימות (או שתיהן) לא הועלתה. אפשר להשלים במסך עריכת ההזמנה.')
         return
       }
 
@@ -403,8 +414,29 @@ export default function NewOrder() {
               disabled={busy}
             />
           </Field>
+
+          <Field label="חתימת סוכן">
+            <div className="flex items-center gap-3">
+              {form.agentSignatureDataUrl ? (
+                <img src={form.agentSignatureDataUrl} alt="חתימת סוכן" className="h-16 rounded border" />
+              ) : (
+                <span className="text-sm text-slate-400">אין חתימה</span>
+              )}
+              <button type="button" className="btn-ghost text-sm" onClick={() => setAgentSigOpen(true)}>
+                ✍️ חתימה
+              </button>
+            </div>
+          </Field>
         </div>
       </div>
+
+      <SignatureModal
+        open={agentSigOpen}
+        title="חתימת סוכן"
+        value={form.agentSignatureDataUrl}
+        onSave={dataUrl => setF('agentSignatureDataUrl', dataUrl)}
+        onClose={() => setAgentSigOpen(false)}
+      />
 
       {error && (
         <div className="text-red-600 text-sm mb-3 card p-3">

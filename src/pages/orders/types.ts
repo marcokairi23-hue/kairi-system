@@ -66,6 +66,7 @@ export interface OrderForm {
   send_email: string
   signature_name: string
   signatureDataUrl?: string | null
+  agentSignatureDataUrl?: string | null
   notes: string
 }
 
@@ -143,6 +144,7 @@ export function emptyForm(agentName: string): OrderForm {
     send_email: '',
     signature_name: '',
     signatureDataUrl: null,
+    agentSignatureDataUrl: null,
     notes: '',
   }
 }

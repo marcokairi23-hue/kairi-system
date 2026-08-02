@@ -14,6 +14,7 @@ import CurtainCard from './CurtainCard'
 import ShadingCard from './ShadingCard'
 import { printOrder, buildFormFromOrder } from './printOrder'
 import SignaturePad from '../../components/SignaturePad'
+import SignatureModal from '../../components/SignatureModal'
 import { uploadSignature, getSignatureUrl } from '../../lib/uploadSignature'
 
 export default function EditOrder() {
@@ -27,6 +28,8 @@ export default function EditOrder() {
   const [error, setError] = useState<string | null>(null)
   const [existingSignatureUrl, setExistingSignatureUrl] = useState<string | null>(null)
   const [signatureCleared, setSignatureCleared] = useState(false)
+  const [existingAgentSignatureUrl, setExistingAgentSignatureUrl] = useState<string | null>(null)
+  const [agentSigOpen, setAgentSigOpen] = useState(false)
 
   useEffect(() => {
     supabase
@@ -41,6 +44,9 @@ export default function EditOrder() {
         setLoading(false)
         if (data.signature_url) {
           getSignatureUrl(data.signature_url).then(setExistingSignatureUrl)
+        }
+        if (data.agent_signature_url) {
+          getSignatureUrl(data.agent_signature_url).then(setExistingAgentSignatureUrl)
         }
       })
   }, [id])
@@ -84,7 +90,17 @@ export default function EditOrder() {
           signaturePath = await uploadSignature(id!, form.signatureDataUrl)
         } catch (e) {
           signatureUploadFailed = true
-          setError(e instanceof Error ? e.message : 'שגיאה בהעלאת החתימה')
+          setError(e instanceof Error ? e.message : 'שגיאה בהעלאת חתימת הלקוח')
+        }
+      }
+
+      let agentSignaturePath: string | undefined
+      if (form.agentSignatureDataUrl) {
+        try {
+          agentSignaturePath = await uploadSignature(id!, form.agentSignatureDataUrl, 'agent')
+        } catch (e) {
+          signatureUploadFailed = true
+          setError(e instanceof Error ? e.message : 'שגיאה בהעלאת חתימת הסוכן')
         }
       }
 
@@ -101,6 +117,7 @@ export default function EditOrder() {
         send_email: form.send_email || null,
         signature_name: form.signature_name || null,
         ...(signaturePath ? { signature_url: signaturePath } : signatureCleared ? { signature_url: null } : {}),
+        ...(agentSignaturePath ? { agent_signature_url: agentSignaturePath } : {}),
         notes: form.notes || null,
         updated_at: new Date().toISOString(),
       }).eq('id', id)
@@ -342,8 +359,33 @@ export default function EditOrder() {
               disabled={busy}
             />
           </Field>
+
+          <Field label="חתימת סוכן">
+            <div className="flex items-center gap-3">
+              {(form.agentSignatureDataUrl ?? existingAgentSignatureUrl) ? (
+                <img
+                  src={form.agentSignatureDataUrl ?? existingAgentSignatureUrl ?? ''}
+                  alt="חתימת סוכן"
+                  className="h-16 rounded border"
+                />
+              ) : (
+                <span className="text-sm text-slate-400">אין חתימה</span>
+              )}
+              <button type="button" className="btn-ghost text-sm" disabled={busy} onClick={() => setAgentSigOpen(true)}>
+                ✍️ חתימה
+              </button>
+            </div>
+          </Field>
         </div>
       </div>
+
+      <SignatureModal
+        open={agentSigOpen}
+        title="חתימת סוכן"
+        value={form.agentSignatureDataUrl ?? existingAgentSignatureUrl}
+        onSave={dataUrl => setF('agentSignatureDataUrl', dataUrl)}
+        onClose={() => setAgentSigOpen(false)}
+      />
 
       {error && <div className="text-red-600 text-sm mb-3 card p-3">{error}</div>}
 

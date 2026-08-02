@@ -57,6 +57,7 @@ interface Order {
   send_email: string | null
   signature_name: string | null
   signature_url: string | null
+  agent_signature_url: string | null
   pdf_url: string | null
   pdf_url_original: string | null
   notes: string | null
@@ -77,6 +78,8 @@ export default function OrderDetail() {
   const [signatureImgUrl, setSignatureImgUrl] = useState<string | null>(null)
   const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null)
   const [signatureLoading, setSignatureLoading] = useState(false)
+  const [agentSignatureImgUrl, setAgentSignatureImgUrl] = useState<string | null>(null)
+  const [agentSignatureDataUrl, setAgentSignatureDataUrl] = useState<string | null>(null)
   const [updatingStatus, setUpdatingStatus] = useState(false)
   const [showCancelConfirm, setShowCancelConfirm] = useState(false)
   const [tab, setTab] = useState<'details' | 'activity'>('details')
@@ -102,6 +105,10 @@ export default function OrderDetail() {
         setSignatureDataUrl(dataUrl)
         setSignatureLoading(false)
       })
+    }
+    if (data?.agent_signature_url) {
+      getSignatureUrl(data.agent_signature_url).then(setAgentSignatureImgUrl)
+      getSignatureDataUrl(data.agent_signature_url).then(setAgentSignatureDataUrl)
     }
   }
 
@@ -165,7 +172,7 @@ export default function OrderDetail() {
   const syncPdf = async () => {
     setSyncingPdf(true); setSyncError(null)
     try {
-      const pdfBlob = await generateOrderPdf(form, orderNum, true)
+      const pdfBlob = await generateOrderPdf({ ...form, signatureDataUrl, agentSignatureDataUrl }, orderNum, true)
       const pdfUrl = await uploadOrderPdf(id!, pdfBlob)
       await supabase.from('orders').update({ pdf_url: pdfUrl }).eq('id', id)
       await load()
@@ -289,7 +296,7 @@ export default function OrderDetail() {
           className="btn-ghost text-sm"
           disabled={signatureLoading}
           title={signatureLoading ? 'טוען חתימה...' : undefined}
-          onClick={() => printOrder({ ...form, signatureDataUrl }, orderNum, true)}
+          onClick={() => printOrder({ ...form, signatureDataUrl, agentSignatureDataUrl }, orderNum, true)}
         >
           🖨️ הדפס ללקוח
         </button>
@@ -506,13 +513,20 @@ export default function OrderDetail() {
       )}
 
       {(signatureImgUrl || order.signature_name) && (
-        <div className="card p-4">
+        <div className="card p-4 mb-3">
           <div className="text-xs font-bold text-slate-500 mb-1">חתימת לקוח</div>
           {signatureImgUrl ? (
             <img src={signatureImgUrl} alt="חתימת לקוח" className="max-h-40 rounded border" />
           ) : (
             <div className="text-sm">{order.signature_name}</div>
           )}
+        </div>
+      )}
+
+      {agentSignatureImgUrl && (
+        <div className="card p-4">
+          <div className="text-xs font-bold text-slate-500 mb-1">חתימת סוכן</div>
+          <img src={agentSignatureImgUrl} alt="חתימת סוכן" className="max-h-40 rounded border" />
         </div>
       )}
 
