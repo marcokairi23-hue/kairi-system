@@ -130,6 +130,7 @@ export default function EditOrder() {
           form.curtain_items.map((item, idx) => ({
             order_id: id,
             family: 'curtain',
+            production_route: 'internal',
             location: item.location,
             width_cm: parseFloat(item.width_cm) || 0,
             heights_cm: item.heights_cm.split(',').map(h => parseFloat(h.trim())).filter(Boolean),
@@ -152,6 +153,7 @@ export default function EditOrder() {
           form.shading_items.map((item, idx) => ({
             order_id: id,
             family: 'shading',
+            production_route: 'external',
             subtype: item.subtype,
             location: item.location,
             width_cm: parseFloat(item.width_cm) || 0,
