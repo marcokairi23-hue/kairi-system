@@ -4,7 +4,11 @@ import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/auth'
 import { printOrder, buildFormFromOrder } from './printOrder'
 import OrderActivityTab from './OrderActivityTab'
-import { getSignatureUrl, getSignatureDataUrl } from '../../lib/uploadSignature'
+import ItemSelectionDialog from './ItemSelectionDialog'
+import StatusSuggestionBanner from './StatusSuggestionBanner'
+import PaymentModal from './PaymentModal'
+import { getSignatureUrl, getSignatureDataUrl, uploadSignature } from '../../lib/uploadSignature'
+import SignatureModal from '../../components/SignatureModal'
 import { generateOrderPdf } from '../../lib/generateOrderPdf'
 import { uploadOrderPdf } from '../../lib/uploadOrderPdf'
 import {
@@ -60,6 +64,9 @@ interface Order {
   agent_signature_url: string | null
   pdf_url: string | null
   pdf_url_original: string | null
+  installer_name: string | null
+  install_customer_signature_url: string | null
+  install_installer_signature_url: string | null
   notes: string | null
   created_at: string
   profiles?: { full_name: string }
@@ -89,6 +96,17 @@ export default function OrderDetail() {
   const [makeResult, setMakeResult] = useState<'ok' | 'error' | null>(null)
   const [syncingPdf, setSyncingPdf] = useState(false)
   const [syncError, setSyncError] = useState<string | null>(null)
+  const [officeSelectionOpen, setOfficeSelectionOpen] = useState(false)
+  const [showProductionSuggestion, setShowProductionSuggestion] = useState(false)
+  const [installers, setInstallers] = useState<string[]>([])
+  const [showInstallerSuggestion, setShowInstallerSuggestion] = useState(false)
+  const [installCustomerSigOpen, setInstallCustomerSigOpen] = useState(false)
+  const [installInstallerSigOpen, setInstallInstallerSigOpen] = useState(false)
+  const [installCustomerSigUrl, setInstallCustomerSigUrl] = useState<string | null>(null)
+  const [installInstallerSigUrl, setInstallInstallerSigUrl] = useState<string | null>(null)
+  const [completionPaymentOpen, setCompletionPaymentOpen] = useState(false)
+  const [showCompletedSuggestion, setShowCompletedSuggestion] = useState(false)
+  const [reopenConfirmOpen, setReopenConfirmOpen] = useState(false)
 
   const load = async () => {
     const { data } = await supabase
@@ -110,9 +128,30 @@ export default function OrderDetail() {
       getSignatureUrl(data.agent_signature_url).then(setAgentSignatureImgUrl)
       getSignatureDataUrl(data.agent_signature_url).then(setAgentSignatureDataUrl)
     }
+    setInstallCustomerSigUrl(null)
+    setInstallInstallerSigUrl(null)
+    if (data?.install_customer_signature_url) {
+      getSignatureUrl(data.install_customer_signature_url).then(setInstallCustomerSigUrl)
+    }
+    if (data?.install_installer_signature_url) {
+      getSignatureUrl(data.install_installer_signature_url).then(setInstallInstallerSigUrl)
+    }
+  }
+
+  const saveInstallSignature = async (kind: 'install_customer' | 'install_installer', dataUrl: string | null) => {
+    if (!dataUrl || !id) return
+    const path = await uploadSignature(id, dataUrl, kind)
+    const column = kind === 'install_customer' ? 'install_customer_signature_url' : 'install_installer_signature_url'
+    await supabase.from('orders').update({ [column]: path }).eq('id', id)
+    await load()
   }
 
   useEffect(() => { load() }, [id])
+
+  useEffect(() => {
+    supabase.from('settings').select('value').eq('key', 'installers').maybeSingle()
+      .then(({ data }) => setInstallers(Array.isArray(data?.value) ? data.value : []))
+  }, [])
 
   if (loading) return <div className="text-slate-500 p-4">טוען...</div>
   if (!order) return <div className="text-red-500 p-4">הזמנה לא נמצאה</div>
@@ -141,6 +180,45 @@ export default function OrderDetail() {
     })
     await load()
     setUpdatingStatus(false)
+  }
+
+  const confirmOfficeSelection = async (selectedIds: Set<string>) => {
+    const items = order.order_items ?? []
+    await Promise.all(items.map(item =>
+      supabase.from('order_items')
+        .update({ for_execution: selectedIds.has(item.id) })
+        .eq('id', item.id)
+    ))
+    setOfficeSelectionOpen(false)
+    setShowProductionSuggestion(true)
+    await load()
+  }
+
+  const assignInstaller = async (name: string) => {
+    if (!name) return
+    await supabase.from('orders').update({ installer_name: name }).eq('id', id)
+    setShowInstallerSuggestion(true)
+    await load()
+  }
+
+  const markInstallSuccess = () => {
+    if (remaining > 0) setCompletionPaymentOpen(true)
+    else setShowCompletedSuggestion(true)
+  }
+
+  const reopenCase = async () => {
+    setUpdatingStatus(true)
+    await supabase.from('orders').update({ status: 'ready_for_install' }).eq('id', id)
+    await supabase.from('order_status_history').insert({
+      order_id: id,
+      from_status: order.status,
+      to_status: 'ready_for_install',
+      changed_by: profile?.id ?? null,
+      note: 'ההתקנה לא הושלמה — טיפול נפתח, חוזר לשיוך/תיאום מחדש',
+    })
+    setReopenConfirmOpen(false)
+    setUpdatingStatus(false)
+    await load()
   }
 
   const cancelOrder = async () => {
@@ -318,7 +396,20 @@ export default function OrderDetail() {
             סטטוס: <strong>{ORDER_STATUS_LABELS[order.status]}</strong>
           </div>
           <div className="flex gap-2">
-            {nextStatus && (
+            {order.status === 'pending_payment' ? (
+              <button className="btn-primary text-sm py-1.5" onClick={() => setOfficeSelectionOpen(true)}>
+                🎯 בחירה סופית
+              </button>
+            ) : order.status === 'ready_for_install' ? (
+              <select
+                className="input text-sm py-1.5"
+                value={order.installer_name ?? ''}
+                onChange={e => assignInstaller(e.target.value)}
+              >
+                <option value="">שיוך מתקין...</option>
+                {installers.map(name => <option key={name} value={name}>{name}</option>)}
+              </select>
+            ) : nextStatus && (
               <button className="btn-primary text-sm py-1.5" disabled={updatingStatus} onClick={advanceStatus}>
                 {updatingStatus ? '...' : `← ${ORDER_STATUS_LABELS[nextStatus]}`}
               </button>
@@ -328,6 +419,133 @@ export default function OrderDetail() {
             </button>
           </div>
         </div>
+      )}
+
+      {showProductionSuggestion && order.status === 'pending_payment' && (
+        <div className="mb-3">
+          <StatusSuggestionBanner
+            orderId={id!}
+            currentStatus={order.status}
+            suggestedStatus="in_production"
+            reason="בחירה סופית בוצעה — להעביר לייצור?"
+            onApplied={() => { setShowProductionSuggestion(false); load() }}
+          />
+        </div>
+      )}
+
+      {showInstallerSuggestion && order.status === 'ready_for_install' && (
+        <div className="mb-3">
+          <StatusSuggestionBanner
+            orderId={id!}
+            currentStatus={order.status}
+            suggestedStatus="picked_by_installer"
+            reason={`${order.installer_name} שויך — לשנות ל"נאסף ע"י מתקין"?`}
+            onApplied={() => { setShowInstallerSuggestion(false); load() }}
+          />
+        </div>
+      )}
+
+      {order.status === 'picked_by_installer' && (
+        <div className="card p-4 mb-3">
+          <div className="text-xs font-bold text-slate-500 mb-2">חתימות סיום התקנה</div>
+          <div className="grid grid-cols-2 gap-3">
+            <div>
+              <div className="text-sm mb-1">
+                {installCustomerSigUrl ? '✅ חתימת לקוח' : '⬜ חתימת לקוח'}
+              </div>
+              {installCustomerSigUrl && (
+                <img src={installCustomerSigUrl} alt="חתימת לקוח" className="h-16 rounded border mb-2" />
+              )}
+              <button className="btn-ghost text-sm" onClick={() => setInstallCustomerSigOpen(true)}>
+                ✍️ {installCustomerSigUrl ? 'חתום מחדש' : 'חתימה'}
+              </button>
+            </div>
+            <div>
+              <div className="text-sm mb-1">
+                {installInstallerSigUrl ? '✅ חתימת מתקין' : '⬜ חתימת מתקין'}
+              </div>
+              {installInstallerSigUrl && (
+                <img src={installInstallerSigUrl} alt="חתימת מתקין" className="h-16 rounded border mb-2" />
+              )}
+              <button className="btn-ghost text-sm" onClick={() => setInstallInstallerSigOpen(true)}>
+                ✍️ {installInstallerSigUrl ? 'חתום מחדש' : 'חתימה'}
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      <SignatureModal
+        open={installCustomerSigOpen}
+        title="חתימת לקוח — סיום התקנה"
+        value={null}
+        onSave={dataUrl => saveInstallSignature('install_customer', dataUrl)}
+        onClose={() => setInstallCustomerSigOpen(false)}
+      />
+      <SignatureModal
+        open={installInstallerSigOpen}
+        title="חתימת מתקין — סיום התקנה"
+        value={null}
+        onSave={dataUrl => saveInstallSignature('install_installer', dataUrl)}
+        onClose={() => setInstallInstallerSigOpen(false)}
+      />
+
+      {order.status === 'picked_by_installer'
+        && order.install_customer_signature_url
+        && order.install_installer_signature_url
+        && !showCompletedSuggestion && (
+        <div className="card p-4 mb-3">
+          <div className="text-sm font-medium mb-3">האם ההתקנה הושלמה בהצלחה?</div>
+          <div className="flex gap-2">
+            <button className="btn-primary flex-1" onClick={markInstallSuccess}>
+              ✅ כן, הושלמה
+            </button>
+            <button className="btn-ghost flex-1 text-red-500" onClick={() => setReopenConfirmOpen(true)}>
+              ⚠️ לא — פתיחת טיפול
+            </button>
+          </div>
+        </div>
+      )}
+
+      {showCompletedSuggestion && (
+        <div className="mb-3">
+          <StatusSuggestionBanner
+            orderId={id!}
+            currentStatus={order.status}
+            suggestedStatus="completed"
+            reason="ההתקנה הושלמה והיתרה נגבתה — לסמן את ההזמנה כהושלמה?"
+            onApplied={() => { setShowCompletedSuggestion(false); load() }}
+          />
+        </div>
+      )}
+
+      {reopenConfirmOpen && (
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4">
+          <div className="bg-white rounded-2xl p-6 w-full max-w-sm">
+            <h3 className="font-bold text-lg mb-2">לפתוח טיפול?</h3>
+            <p className="text-slate-500 text-sm mb-4">
+              ההזמנה תחזור לשיוך/תיאום מתקין מחדש.
+            </p>
+            <div className="flex gap-3">
+              <button className="btn-primary bg-red-500 hover:bg-red-600 flex-1" disabled={updatingStatus} onClick={reopenCase}>
+                כן, פתח טיפול
+              </button>
+              <button className="btn-ghost flex-1" onClick={() => setReopenConfirmOpen(false)}>ביטול</button>
+            </div>
+          </div>
+        </div>
+      )}
+
+      {completionPaymentOpen && (
+        <PaymentModal
+          orderId={id!}
+          orderNumber={orderNum}
+          customerName={order.customer_name_snapshot}
+          finalTotal={order.final_total}
+          alreadyPaid={paid}
+          onClose={() => setCompletionPaymentOpen(false)}
+          onSaved={() => { setCompletionPaymentOpen(false); setShowCompletedSuggestion(true); load() }}
+        />
       )}
 
       {/* פרטי לקוח */}
@@ -421,6 +639,18 @@ export default function OrderDetail() {
               : 'bg-slate-300'
             }`} style={{ width: `${prog.percent}%` }} />
           </div>
+        </div>
+      )}
+
+      {order.status === 'in_production' && prog.isComplete && (
+        <div className="mb-3">
+          <StatusSuggestionBanner
+            orderId={id!}
+            currentStatus={order.status}
+            suggestedStatus="ready_for_install"
+            reason="כל הפריטים מוכנים — לשנות ל'מוכנה'? (התראה תירשם ביומן לאדמין, מתקין ומשרד)"
+            onApplied={() => load()}
+          />
         </div>
       )}
 
@@ -544,6 +774,18 @@ export default function OrderDetail() {
           </div>
         </div>
       )}
+
+      <ItemSelectionDialog
+        open={officeSelectionOpen}
+        items={(order.order_items ?? []).map(i => ({
+          id: i.id, family: i.family, location: i.location, subtype: i.subtype,
+          price: i.price, for_execution: i.for_execution,
+        }))}
+        orderTotal={order.final_total}
+        stage="office"
+        onConfirm={confirmOfficeSelection}
+        onClose={() => setOfficeSelectionOpen(false)}
+      />
     </div>
   )
 }
