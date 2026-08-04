@@ -5,9 +5,11 @@ import { useAuth } from '../../lib/auth'
 import BulkActionBar from './BulkActionBar'
 import {
   ITEM_STATUS_LABELS, ITEM_STATUS_COLORS, ITEM_STATUS_ORDER, SHADING_LABELS,
+  ITEM_ROUTE_LABELS, ItemRoute, resolveItemRoute, nextItemStatus,
 } from '../../lib/statusHelpers'
 import { printWorkOrder } from './printWork'
 import SyncOrderDialog from '../orders/SyncOrderDialog'
+import ItemAdvanceDialog from '../orders/ItemAdvanceDialog'
 import { suggestOrderStatus } from '../../lib/statusHelpers'
 
 interface Item {
@@ -26,6 +28,8 @@ interface Item {
   mount_type: string | null
   mechanism_side: string | null
   color_fabric_text: string | null
+  production_route: 'internal' | 'external' | null
+  assigned_worker: string | null
   price: number
   for_execution: boolean
   item_status: string
@@ -54,6 +58,8 @@ export default function ItemsList() {
   const [items, setItems] = useState<Item[]>([])
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('all')
+  const [activeRoute, setActiveRoute] = useState<'all' | ItemRoute>('all')
+  const [advanceItem, setAdvanceItem] = useState<Item | null>(null)
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [err, setErr] = useState<string | null>(null)
@@ -100,6 +106,7 @@ export default function ItemsList() {
     return items.filter(i => {
       if (i.item_status === 'cancelled' && activeTab !== 'all') return false
       if (tab.statuses.length && !tab.statuses.includes(i.item_status)) return false
+      if (activeRoute !== 'all' && resolveItemRoute(i.production_route, i.family) !== activeRoute) return false
       if (search) {
         const q = search.toLowerCase()
         return (
@@ -111,7 +118,7 @@ export default function ItemsList() {
       }
       return true
     })
-  }, [items, activeTab, search])
+  }, [items, activeTab, activeRoute, search])
 
   const allSelected = filtered.length > 0 && selected.size === filtered.length
 
@@ -125,33 +132,8 @@ export default function ItemsList() {
     setSelected(allSelected ? new Set() : new Set(filtered.map(i => i.id)))
   }
 
-  const applyStatus = async (status: string) => {
-    const ids = Array.from(selected)
-    await supabase.from('order_items').update({ item_status: status }).in('id', ids)
-
-    // רישום היסטוריה
-    const rows = ids.map(itemId => {
-      const item = items.find(i => i.id === itemId)
-      return {
-        order_id: item?.order_id,
-        order_item_id: itemId,
-        to_status: status,
-        changed_by: profile?.id ?? null,
-        note: 'עדכון גורף ממסך פריטים',
-      }
-    }).filter(r => r.order_id)
-
-    if (rows.length) await supabase.from('order_status_history').insert(rows)
-
-    // אילו הזמנות הושפעו?
-    const affectedOrderIds = Array.from(new Set(
-      ids.map(id => items.find(i => i.id === id)?.order_id).filter(Boolean) as string[]
-    ))
-
-    setSelected(new Set())
-    await load()
-
-    // בדוק לכל הזמנה שהושפעה — האם כל הפריטים באותו סטטוס?
+  // בדוק לכל הזמנה שהושפעה — האם כל הפריטים באותו סטטוס? אם כן, הוסף להצעת סנכרון.
+  const checkSyncForOrders = async (affectedOrderIds: string[]) => {
     const queue: typeof syncQueue = []
 
     for (const orderId of affectedOrderIds) {
@@ -182,6 +164,34 @@ export default function ItemsList() {
     }
 
     if (queue.length) setSyncQueue(queue)
+  }
+
+  const applyStatus = async (status: string) => {
+    const ids = Array.from(selected)
+    await supabase.from('order_items').update({ item_status: status }).in('id', ids)
+
+    // רישום היסטוריה
+    const rows = ids.map(itemId => {
+      const item = items.find(i => i.id === itemId)
+      return {
+        order_id: item?.order_id,
+        order_item_id: itemId,
+        to_status: status,
+        changed_by: profile?.id ?? null,
+        note: 'עדכון גורף ממסך פריטים',
+      }
+    }).filter(r => r.order_id)
+
+    if (rows.length) await supabase.from('order_status_history').insert(rows)
+
+    // אילו הזמנות הושפעו?
+    const affectedOrderIds = Array.from(new Set(
+      ids.map(id => items.find(i => i.id === id)?.order_id).filter(Boolean) as string[]
+    ))
+
+    setSelected(new Set())
+    await load()
+    await checkSyncForOrders(affectedOrderIds)
   }
 
   // אישור קידום הזמנה מהתור
@@ -246,6 +256,20 @@ export default function ItemsList() {
         ))}
       </div>
 
+      {/* סינון לפי מסלול */}
+      <div className="flex gap-1 mb-3">
+        {(['all', 'cutter', 'office'] as const).map(route => (
+          <button key={route} onClick={() => setActiveRoute(route)}
+                  className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                    activeRoute === route
+                      ? 'bg-slate-700 text-white'
+                      : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50'
+                  }`}>
+            {route === 'all' ? 'כל המסלולים' : ITEM_ROUTE_LABELS[route]}
+          </button>
+        ))}
+      </div>
+
       {err && (
         <div className="card p-4 mb-3 text-red-600 text-sm">{err}</div>
       )}
@@ -294,8 +318,15 @@ export default function ItemsList() {
                     )}
                   </div>
 
-                  <div className="text-xs text-slate-600 mt-0.5">
-                    {itemTypeLabel(i)} — {i.location}
+                  <div className="text-xs text-slate-600 mt-0.5 flex items-center gap-1">
+                    <span>{itemTypeLabel(i)} — {i.location}</span>
+                    <span className={`px-1.5 py-0.5 rounded text-[10px] ${
+                      resolveItemRoute(i.production_route, i.family) === 'cutter'
+                        ? 'bg-purple-100 text-purple-700'
+                        : 'bg-blue-100 text-blue-700'
+                    }`}>
+                      {ITEM_ROUTE_LABELS[resolveItemRoute(i.production_route, i.family)]}
+                    </span>
                   </div>
 
                   <div className="text-xs text-slate-400 flex flex-wrap gap-x-2 mt-0.5">
@@ -306,11 +337,21 @@ export default function ItemsList() {
                   </div>
                 </div>
 
-                <span className={`text-xs px-2 py-0.5 rounded-full shrink-0 ${
-                  ITEM_STATUS_COLORS[i.item_status] ?? 'bg-slate-100'
-                }`}>
-                  {ITEM_STATUS_LABELS[i.item_status] ?? i.item_status}
-                </span>
+                <div className="flex flex-col items-end gap-1 shrink-0">
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${
+                    ITEM_STATUS_COLORS[i.item_status] ?? 'bg-slate-100'
+                  }`}>
+                    {ITEM_STATUS_LABELS[i.item_status] ?? i.item_status}
+                  </span>
+                  {nextItemStatus(resolveItemRoute(i.production_route, i.family), i.item_status) && (
+                    <button
+                      className="text-xs text-brand hover:underline"
+                      onClick={() => setAdvanceItem(i)}
+                    >
+                      ▶ קדם
+                    </button>
+                  )}
+                </div>
               </div>
             ))}
           </div>
@@ -336,6 +377,18 @@ export default function ItemsList() {
           onCancel={skipSync}
         />
       )}
+
+      <ItemAdvanceDialog
+        open={!!advanceItem}
+        item={advanceItem}
+        onClose={() => setAdvanceItem(null)}
+        onDone={async () => {
+          const orderId = advanceItem?.order_id
+          setAdvanceItem(null)
+          await load()
+          if (orderId) await checkSyncForOrders([orderId])
+        }}
+      />
     </div>
   )
 }
