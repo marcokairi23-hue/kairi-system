@@ -12,6 +12,7 @@ import EditOrder from './pages/orders/EditOrder'
 import ItemsList from './pages/items/ItemsList'
 import ActivityLog from './pages/activity/ActivityLog'
 import UsersList from './pages/users/UsersList'
+import SettingsPage from './pages/settings/SettingsPage'
 
 export default function App() {
   const { session, loading, profile } = useAuth()
@@ -40,6 +41,7 @@ export default function App() {
         <Route path="/items" element={<ItemsList />} />
         <Route path="/activity" element={<ActivityLog />} />
         <Route path="/users" element={profile?.role === 'admin' ? <UsersList /> : <Navigate to="/" replace />} />
+        <Route path="/settings" element={profile?.role === 'admin' ? <SettingsPage /> : <Navigate to="/" replace />} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>

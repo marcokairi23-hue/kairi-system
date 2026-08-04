@@ -13,7 +13,7 @@ const navItems = [
 export default function Layout({ children }: { children: ReactNode }) {
   const { profile, signOut } = useAuth()
   const items = profile?.role === 'admin'
-    ? [...navItems, { to: '/users', label: 'משתמשים' }]
+    ? [...navItems, { to: '/users', label: 'משתמשים' }, { to: '/settings', label: 'הגדרות' }]
     : navItems
 
   return (
