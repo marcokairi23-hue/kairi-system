@@ -1,7 +1,16 @@
 import { supabase } from './supabase'
 
-export async function uploadSignature(orderId: string, dataUrl: string, kind: 'customer' | 'agent' = 'customer'): Promise<string> {
-  const path = kind === 'agent' ? `signatures/${orderId}-agent.png` : `signatures/${orderId}.png`
+export type SignatureKind = 'customer' | 'agent' | 'install_customer' | 'install_installer'
+
+const SIGNATURE_PATH_SUFFIX: Record<SignatureKind, string> = {
+  customer: '',
+  agent: '-agent',
+  install_customer: '-install-customer',
+  install_installer: '-install-installer',
+}
+
+export async function uploadSignature(orderId: string, dataUrl: string, kind: SignatureKind = 'customer'): Promise<string> {
+  const path = `signatures/${orderId}${SIGNATURE_PATH_SUFFIX[kind]}.png`
 
   let blob: Blob
   try {
