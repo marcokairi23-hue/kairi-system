@@ -12,6 +12,7 @@ import {
 import { Field, SummaryBox, BlockHeader } from './FormFields'
 import CurtainCard from './CurtainCard'
 import ShadingCard from './ShadingCard'
+import ItemSelectionDialog from './ItemSelectionDialog'
 import { printOrder } from './printOrder'
 import SignatureModal from '../../components/SignatureModal'
 import { uploadSignature } from '../../lib/uploadSignature'
@@ -25,6 +26,7 @@ export default function NewOrder() {
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showDialog, setShowDialog] = useState(false)
+  const [itemSelectionOpen, setItemSelectionOpen] = useState(false)
   const [createdOrderId, setCreatedOrderId] = useState<string | null>(null)
   const [customerSigOpen, setCustomerSigOpen] = useState(false)
   const [agentSigOpen, setAgentSigOpen] = useState(false)
@@ -63,15 +65,29 @@ export default function NewOrder() {
 
   const fillTotal = () => setF('final_total', String(autoTotal))
 
+  const confirmItemSelection = (selectedIds: Set<string>) => {
+    const updated: OrderForm = {
+      ...form,
+      curtain_items: form.curtain_items.map(i => ({ ...i, for_execution: selectedIds.has(i.id) })),
+      shading_items: form.shading_items.map(i => ({ ...i, for_execution: selectedIds.has(i.id) })),
+    }
+    setForm(updated)
+    setItemSelectionOpen(false)
+    save(false, updated)
+  }
+
   // --- שמירה ---
-  const save = async (isQuote: boolean) => {
+  const save = async (isQuote: boolean, formOverride?: OrderForm) => {
+    const f = formOverride ?? form
+    const fItemsTotal = calcItemsTotal(f)
+    const fTotalWidth = calcTotalWidth(f)
     setBusy(true); setError(null)
     try {
       // יצירת לקוח
       const { data: cust, error: ce } = await supabase.from('customers').insert({
-        full_name: form.customer_name,
-        phone: form.phone,
-        address: form.address,
+        full_name: f.customer_name,
+        phone: f.phone,
+        address: f.address,
       }).select('id').single()
       if (ce) throw ce
 
@@ -81,17 +97,17 @@ export default function NewOrder() {
         status: isQuote ? 'quote' : 'pending_payment',
         customer_id: cust.id,
         agent_id: profile!.id,
-        customer_name_snapshot: form.customer_name,
-        phone_snapshot: form.phone,
-        address_snapshot: form.address,
-        items_total: itemsTotal,
-        installation_fee: parseFloat(form.installation_fee) || 0,
-        discount: parseFloat(form.discount) || 0,
-        final_total: parseFloat(form.final_total) || 0,
-        total_width_m: totalWidth,
-        send_email: form.send_email || null,
-        signature_name: form.signature_name || null,
-        notes: form.notes || null,
+        customer_name_snapshot: f.customer_name,
+        phone_snapshot: f.phone,
+        address_snapshot: f.address,
+        items_total: fItemsTotal,
+        installation_fee: parseFloat(f.installation_fee) || 0,
+        discount: parseFloat(f.discount) || 0,
+        final_total: parseFloat(f.final_total) || 0,
+        total_width_m: fTotalWidth,
+        send_email: f.send_email || null,
+        signature_name: f.signature_name || null,
+        notes: f.notes || null,
       }).select('id').single()
       if (oe) throw oe
 
@@ -101,18 +117,18 @@ export default function NewOrder() {
 
       // העלאת חתימות (לא חוסמת את שמירת ההזמנה בכישלון)
       let signatureUploadFailed = false
-      if (form.signatureDataUrl) {
+      if (f.signatureDataUrl) {
         try {
-          const path = await uploadSignature(order.id, form.signatureDataUrl)
+          const path = await uploadSignature(order.id, f.signatureDataUrl)
           await supabase.from('orders').update({ signature_url: path }).eq('id', order.id)
         } catch (sigErr) {
           console.error('שגיאה בהעלאת חתימת לקוח:', sigErr)
           signatureUploadFailed = true
         }
       }
-      if (form.agentSignatureDataUrl) {
+      if (f.agentSignatureDataUrl) {
         try {
-          const path = await uploadSignature(order.id, form.agentSignatureDataUrl, 'agent')
+          const path = await uploadSignature(order.id, f.agentSignatureDataUrl, 'agent')
           await supabase.from('orders').update({ agent_signature_url: path }).eq('id', order.id)
         } catch (sigErr) {
           console.error('שגיאה בהעלאת חתימת סוכן:', sigErr)
@@ -121,11 +137,12 @@ export default function NewOrder() {
       }
 
       // פריטי וילונות
-      if (form.curtain_items.length > 0) {
+      if (f.curtain_items.length > 0) {
         await supabase.from('order_items').insert(
-          form.curtain_items.map((item, idx) => ({
+          f.curtain_items.map((item, idx) => ({
             order_id: order.id,
             family: 'curtain',
+            production_route: 'internal',
             location: item.location,
             width_cm: parseFloat(item.width_cm) || 0,
             heights_cm: item.heights_cm.split(',').map(h => parseFloat(h.trim())).filter(Boolean),
@@ -144,11 +161,12 @@ export default function NewOrder() {
       }
 
       // פריטי הצללה
-      if (form.shading_items.length > 0) {
+      if (f.shading_items.length > 0) {
         await supabase.from('order_items').insert(
-          form.shading_items.map((item, idx) => ({
+          f.shading_items.map((item, idx) => ({
             order_id: order.id,
             family: 'shading',
+            production_route: 'external',
             subtype: item.subtype,
             location: item.location,
             width_cm: parseFloat(item.width_cm) || 0,
@@ -167,7 +185,7 @@ export default function NewOrder() {
 
       // הפקת PDF והעלאה ל-Storage (לא חוסמת את שמירת ההזמנה בכישלון)
       try {
-        const pdfBlob = await generateOrderPdf(form, allocatedNumber ?? 'טיוטה', true)
+        const pdfBlob = await generateOrderPdf(f, allocatedNumber ?? 'טיוטה', true)
         const pdfUrl = await uploadOrderPdf(order.id, pdfBlob)
         const pdfUrlOriginal = await uploadOrderPdf(order.id, pdfBlob, true)
         await supabase.from('orders').update({ pdf_url: pdfUrl, pdf_url_original: pdfUrlOriginal }).eq('id', order.id)
@@ -176,11 +194,11 @@ export default function NewOrder() {
       }
 
       // תשלום ראשוני
-      if (form.paid_on_account && parseFloat(form.paid_on_account) > 0) {
+      if (f.paid_on_account && parseFloat(f.paid_on_account) > 0) {
         await supabase.from('payments').insert({
           order_id: order.id,
-          amount: parseFloat(form.paid_on_account),
-          method: form.payment_method || null,
+          amount: parseFloat(f.paid_on_account),
+          method: f.payment_method || null,
           received_by: profile!.id,
         })
       }
@@ -492,7 +510,7 @@ export default function NewOrder() {
             <div className="space-y-3">
               <button
                 className="w-full text-right p-4 rounded-xl border-2 border-amber-300 bg-amber-50 hover:bg-amber-100"
-                onClick={() => { setShowDialog(false); save(false) }}>
+                onClick={() => { setShowDialog(false); setItemSelectionOpen(true) }}>
                 <div className="font-bold text-amber-800">בקשה לגבייה + העברה לביצוע</div>
                 <div className="text-xs text-amber-600">ההזמנה תועבר לסטטוס "ממתין לגבייה"</div>
               </button>
@@ -510,6 +528,24 @@ export default function NewOrder() {
           </div>
         </div>
       )}
+
+      <ItemSelectionDialog
+        open={itemSelectionOpen}
+        items={[
+          ...form.curtain_items.map(i => ({
+            id: i.id, family: i.family, location: i.location,
+            price: parseFloat(i.price) || 0, for_execution: i.for_execution,
+          })),
+          ...form.shading_items.map(i => ({
+            id: i.id, family: i.family, location: i.location, subtype: i.subtype,
+            price: parseFloat(i.price) || 0, for_execution: i.for_execution,
+          })),
+        ]}
+        orderTotal={parseFloat(form.final_total) || 0}
+        stage="agent"
+        onConfirm={confirmItemSelection}
+        onClose={() => setItemSelectionOpen(false)}
+      />
     </div>
   )
 }
