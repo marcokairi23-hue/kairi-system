@@ -38,6 +38,7 @@
 - **מיקום:** `src/pages/orders/EditOrder.tsx` שורה 126: `await supabase.from('order_items').delete().eq('order_id', id)` (ללא `const { error } = ...`).
 - **התנהגות מצופה:** לבדוק את שגיאת ה-delete ולעצור/להתריע, או לבצע UPDATE לפריטים קיימים במקום DELETE+INSERT, כדי לשמר את זהות השורות ואת שרשרת ההיסטוריה.
 - **חומרה:** חוסם
+- **סטטוס:** ✅ תוקן (11.08.2026, commit `e3fad02`) — `EditOrder.tsx` עבר ל-UPDATE לפי `db_id` לפריטים קיימים, INSERT לחדשים, DELETE רק לפריטים שהוסרו בפועל בטופס; כל קריאת DB נבדקת לשגיאה.
 - **ראיה:** `pg_constraint.confdeltype = 'a'` (NO ACTION) עבור `order_status_history_order_item_id_fkey` ו-`stock_movements_item_fk`, שתיהן מצביעות ל-`order_items.id`; יש 72 שורות ב-`order_status_history` עם `order_item_id` לא ריק (לדוגמה הזמנה 9007 עם 6 רשומות היסטוריה ברמת פריט) — עריכה ושמירה של הזמנה כזו תפעיל את התרחיש הזה.
 
 ### 6. חוסר סנכרון בין סטטוס הזמנה לסטטוס הפריטים בפועל (נתונים קיימים)
