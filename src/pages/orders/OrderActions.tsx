@@ -26,8 +26,8 @@ export interface ActionOrder {
     family: string
     subtype?: string | null
     location: string
-    width_cm: number
-    heights_cm: number[]
+    width_m: number
+    heights_m: number[]
     sewing_type?: string
     hem_cm?: number
     shtaif_cm?: number
@@ -85,7 +85,7 @@ export default function OrderActions({
         const label = i.family === 'curtain'
           ? 'וילון'
           : SHADING_LABELS[i.subtype ?? ''] ?? 'הצללה'
-        return `• ${label} ${i.location} — ${i.width_cm}×${i.heights_cm.join('/')} ס״מ`
+        return `• ${label} ${i.location} — ${i.width_m}×${i.heights_m.join('/')} מ׳`
       }).join('\n')
 
     const text = `שלום ${order.customer_name_snapshot} 😊

@@ -9,8 +9,8 @@ export interface CurtainItem {
   db_id?: string          // id אמיתי ב-order_items (undefined = פריט חדש שטרם נשמר)
   family: 'curtain'
   location: string
-  width_cm: string
-  heights_cm: string        // מופרד בפסיקים: "306,306,307"
+  width_m: string
+  heights_m: string        // מופרד בפסיקים: "3.06,3.06,3.07"
   sewing_type: string
   hem_cm: string
   shtaif_cm: string
@@ -28,8 +28,8 @@ export interface ShadingItem {
   family: 'shading'
   subtype: ShadingSubtype
   location: string
-  width_cm: string
-  heights_cm: string
+  width_m: string
+  heights_m: string
   mount_type: string        // רגלי קיר / תקרה
   mechanism_side: string    // ימין / שמאל
   color_fabric_text: string
@@ -96,8 +96,8 @@ export function newCurtainItem(): CurtainItem {
     id: uid(),
     family: 'curtain',
     location: '',
-    width_cm: '',
-    heights_cm: '',
+    width_m: '',
+    heights_m: '',
     sewing_type: 'שטוח הפוך',
     hem_cm: '10',
     shtaif_cm: '10',
@@ -116,8 +116,8 @@ export function newShadingItem(): ShadingItem {
     family: 'shading',
     subtype: 'zebra',
     location: '',
-    width_cm: '',
-    heights_cm: '',
+    width_m: '',
+    heights_m: '',
     mount_type: 'תקרה',
     mechanism_side: 'ימין',
     color_fabric_text: '',
@@ -164,15 +164,15 @@ export function calcItemsTotal(form: OrderForm): number {
   return curtains + shadings + accessories
 }
 
-// סה"כ רוחב (מטר קיר) — סכום רוחבי הפריטים לביצוע
+// סה"כ רוחב (מטר קיר) — סכום רוחבי הפריטים לביצוע (width_m כבר במטרים)
 export function calcTotalWidth(form: OrderForm): number {
   const curtains = form.curtain_items
     .filter(i => i.for_execution)
-    .reduce((s, i) => s + (parseFloat(i.width_cm) || 0), 0)
+    .reduce((s, i) => s + (parseFloat(i.width_m) || 0), 0)
   const shadings = form.shading_items
     .filter(i => i.for_execution)
-    .reduce((s, i) => s + (parseFloat(i.width_cm) || 0), 0)
-  return (curtains + shadings) / 100
+    .reduce((s, i) => s + (parseFloat(i.width_m) || 0), 0)
+  return curtains + shadings
 }
 
 // חישוב אוטומטי = סה"כ פריטים - הנחה

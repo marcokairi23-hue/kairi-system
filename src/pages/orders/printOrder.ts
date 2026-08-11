@@ -17,8 +17,8 @@ export function buildOrderHtml(form: OrderForm, orderNumber: string | number, sh
       <td>${i + 1}</td>
       <td>${item.location}</td>
       <td>${item.sewing_type}</td>
-      <td dir="ltr">${item.width_cm}</td>
-      <td dir="ltr">${item.heights_cm}</td>
+      <td dir="ltr">${item.width_m}</td>
+      <td dir="ltr">${item.heights_m}</td>
       <td>${item.shtaif_cm}</td>
       <td>${item.hem_cm}</td>
       <td>${item.is_split ? 'כן' : 'לא'}</td>
@@ -34,8 +34,8 @@ export function buildOrderHtml(form: OrderForm, orderNumber: string | number, sh
       <td>${SHADING_LABELS[item.subtype] ?? item.subtype}</td>
       <td>${item.location}</td>
       <td>${item.mount_type}</td>
-      <td dir="ltr">${item.width_cm}</td>
-      <td dir="ltr">${item.heights_cm}</td>
+      <td dir="ltr">${item.width_m}</td>
+      <td dir="ltr">${item.heights_m}</td>
       <td>${item.mechanism_side}</td>
       <td>${item.color_fabric_text}</td>
       <td>${item.for_execution ? '✓' : ''}</td>
@@ -133,7 +133,7 @@ export function buildOrderHtml(form: OrderForm, orderNumber: string | number, sh
   <h3>מידות וילונות</h3>
   <table>
     <thead><tr>
-      <th>#</th><th>מיקום</th><th>סוג תפירה</th><th>רוחב</th><th>גובה/ים</th>
+      <th>#</th><th>מיקום</th><th>סוג תפירה</th><th>רוחב (מ׳)</th><th>גובה/ים (מ׳)</th>
       <th>שטייף</th><th>מכפלת</th><th>חצוי</th><th>בד</th><th>ביצוע</th>
       ${showPrices ? '<th>עלות</th>' : ''}<th>הערות</th>
     </tr></thead>
@@ -144,7 +144,7 @@ export function buildOrderHtml(form: OrderForm, orderNumber: string | number, sh
   <h3 class="shading">זברות / ונציאני / רומי / גלילה</h3>
   <table>
     <thead><tr>
-      <th>#</th><th>סוג</th><th>מיקום</th><th>התקנה</th><th>רוחב</th><th>גובה</th>
+      <th>#</th><th>סוג</th><th>מיקום</th><th>התקנה</th><th>רוחב (מ׳)</th><th>גובה (מ׳)</th>
       <th>צד מנגנון</th><th>צבע/בד</th><th>ביצוע</th>
       ${showPrices ? '<th>עלות</th>' : ''}<th>הערות</th>
     </tr></thead>
@@ -215,8 +215,8 @@ export function buildFormFromOrder(order: {
     family: string
     subtype?: string | null
     location: string
-    width_cm: number
-    heights_cm: number[]
+    width_m: number
+    heights_m: number[]
     sewing_type?: string
     hem_cm?: number
     shtaif_cm?: number
@@ -242,8 +242,8 @@ export function buildFormFromOrder(order: {
       db_id: i.id,
       family: 'curtain' as const,
       location: i.location,
-      width_cm: String(i.width_cm),
-      heights_cm: i.heights_cm.join(','),
+      width_m: String(i.width_m),
+      heights_m: i.heights_m.join(','),
       sewing_type: i.sewing_type ?? '',
       hem_cm: String(i.hem_cm ?? 10),
       shtaif_cm: String(i.shtaif_cm ?? 10),
@@ -263,8 +263,8 @@ export function buildFormFromOrder(order: {
       family: 'shading' as const,
       subtype: (i.subtype ?? 'zebra') as import('./types').ShadingSubtype,
       location: i.location,
-      width_cm: String(i.width_cm),
-      heights_cm: i.heights_cm.join(','),
+      width_m: String(i.width_m),
+      heights_m: i.heights_m.join(','),
       mount_type: i.mount_type ?? '',
       mechanism_side: i.mechanism_side ?? '',
       color_fabric_text: i.color_fabric_text ?? '',

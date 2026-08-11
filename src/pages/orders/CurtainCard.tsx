@@ -38,15 +38,15 @@ export default function CurtainCard({ item, index, onChange, onRemove }: Props) 
                  placeholder="סלון, חדר שינה..." />
         </Field>
 
-        <Field label="רוחב (ס״מ)" required>
-          <input className="input" type="number" min="0" dir="ltr" value={item.width_cm}
-                 onChange={e => set('width_cm', e.target.value)} />
+        <Field label="רוחב (מ׳)" required>
+          <input className="input" type="number" min="0" step="0.01" dir="ltr" value={item.width_m}
+                 onChange={e => set('width_m', e.target.value)} />
         </Field>
 
-        <Field label="גובה/ים (ס״מ)" required>
-          <input className="input" dir="ltr" value={item.heights_cm}
-                 onChange={e => set('heights_cm', e.target.value)}
-                 placeholder="306 או 306,307,306" />
+        <Field label="גובה/ים (מ׳)" required>
+          <input className="input" dir="ltr" value={item.heights_m}
+                 onChange={e => set('heights_m', e.target.value)}
+                 placeholder="3.06 או 3.06,3.07,3.06" />
         </Field>
 
         <Field label="סוג תפירה">

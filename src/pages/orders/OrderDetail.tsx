@@ -21,8 +21,8 @@ interface OrderItem {
   family: 'curtain' | 'shading'
   subtype?: string
   location: string
-  width_cm: number
-  heights_cm: number[]
+  width_m: number
+  heights_m: number[]
   sewing_type?: string
   hem_cm?: number
   shtaif_cm?: number
@@ -239,8 +239,8 @@ export default function OrderDetail() {
   const sendWhatsApp = () => {
     const phone = order.phone_snapshot.replace(/\D/g, '').replace(/^0/, '972')
     const items = [
-      ...curtains.map(i => `• וילון ${i.location} — ${i.width_cm}×${i.heights_cm.join('/')} ס״מ`),
-      ...shadings.map(i => `• ${SHADING_LABELS[i.subtype??''] ?? i.subtype} ${i.location} — ${i.width_cm}×${i.heights_cm.join('/')} ס״מ`),
+      ...curtains.map(i => `• וילון ${i.location} — ${i.width_m}×${i.heights_m.join('/')} מ׳`),
+      ...shadings.map(i => `• ${SHADING_LABELS[i.subtype??''] ?? i.subtype} ${i.location} — ${i.width_m}×${i.heights_m.join('/')} מ׳`),
     ].join('\n')
     const text = `שלום ${order.customer_name_snapshot} 😊\nהזמנה מספר #${orderNum} מקאירי וילונות:\n\n${items}\n\nסה״כ לתשלום: ₪${order.final_total.toLocaleString()}\n${paid > 0 ? `שולם: ₪${paid.toLocaleString()}\nנשאר: ₪${remaining.toLocaleString()}` : ''}\n\nתודה! 🙏`
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, '_blank')
@@ -673,8 +673,8 @@ export default function OrderDetail() {
                   </div>
                 </div>
                 <div className="text-slate-500 mt-1 flex flex-wrap gap-x-3 text-xs">
-                  <span>רוחב: {item.width_cm} ס״מ</span>
-                  <span>גובה: {item.heights_cm.join(', ')} ס״מ</span>
+                  <span>רוחב: {item.width_m} מ׳</span>
+                  <span>גובה: {item.heights_m.join(', ')} מ׳</span>
                   <span>תפירה: {item.sewing_type}</span>
                   {item.shtaif_cm != null && <span>שטייף: {item.shtaif_cm}</span>}
                   {item.hem_cm != null && <span>מכפלת: {item.hem_cm}</span>}
@@ -709,8 +709,8 @@ export default function OrderDetail() {
                   </div>
                 </div>
                 <div className="text-slate-500 mt-1 flex flex-wrap gap-x-3 text-xs">
-                  <span>רוחב: {item.width_cm} ס״מ</span>
-                  <span>גובה: {item.heights_cm.join(', ')} ס״מ</span>
+                  <span>רוחב: {item.width_m} מ׳</span>
+                  <span>גובה: {item.heights_m.join(', ')} מ׳</span>
                   {item.mount_type && <span>התקנה: {item.mount_type}</span>}
                   {item.mechanism_side && <span>צד: {item.mechanism_side}</span>}
                   {item.color_fabric_text && <span>צבע: {item.color_fabric_text}</span>}

@@ -18,8 +18,8 @@ interface Item {
   family: string
   subtype: string | null
   location: string
-  width_cm: number
-  heights_cm: number[]
+  width_m: number
+  heights_m: number[]
   sewing_type: string | null
   hem_cm: number | null
   shtaif_cm: number | null
@@ -330,7 +330,7 @@ export default function ItemsList() {
                   </div>
 
                   <div className="text-xs text-slate-400 flex flex-wrap gap-x-2 mt-0.5">
-                    <span dir="ltr">{i.width_cm}×{i.heights_cm.join('/')} ס״מ</span>
+                    <span dir="ltr">{i.width_m}×{i.heights_m.join('/')} מ׳</span>
                     {i.sewing_type && <span>{i.sewing_type}</span>}
                     {i.fabric_text && <span>בד: {i.fabric_text}</span>}
                     {i.color_fabric_text && <span>{i.color_fabric_text}</span>}

@@ -50,14 +50,14 @@ export default function ShadingCard({ item, index, onChange, onRemove }: Props) 
           </select>
         </Field>
 
-        <Field label="רוחב (ס״מ)" required>
-          <input className="input" type="number" min="0" dir="ltr" value={item.width_cm}
-                 onChange={e => set('width_cm', e.target.value)} />
+        <Field label="רוחב (מ׳)" required>
+          <input className="input" type="number" min="0" step="0.01" dir="ltr" value={item.width_m}
+                 onChange={e => set('width_m', e.target.value)} />
         </Field>
 
-        <Field label="גובה (ס״מ)" required>
-          <input className="input" dir="ltr" value={item.heights_cm}
-                 onChange={e => set('heights_cm', e.target.value)} />
+        <Field label="גובה (מ׳)" required>
+          <input className="input" dir="ltr" value={item.heights_m}
+                 onChange={e => set('heights_m', e.target.value)} />
         </Field>
 
         <Field label="צד מנגנון">

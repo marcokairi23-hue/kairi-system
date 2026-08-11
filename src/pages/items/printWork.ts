@@ -4,8 +4,8 @@ interface WorkItem {
   family: string
   subtype: string | null
   location: string
-  width_cm: number
-  heights_cm: number[]
+  width_m: number
+  heights_m: number[]
   sewing_type: string | null
   hem_cm: number | null
   shtaif_cm: number | null
@@ -35,8 +35,8 @@ export function printWorkOrder(items: WorkItem[]) {
       <td>${i.orders?.customer_name_snapshot ?? ''}</td>
       <td>${i.location}</td>
       <td>${i.sewing_type ?? ''}</td>
-      <td dir="ltr">${i.width_cm}</td>
-      <td dir="ltr">${i.heights_cm.join(', ')}</td>
+      <td dir="ltr">${i.width_m}</td>
+      <td dir="ltr">${i.heights_m.join(', ')}</td>
       <td>${i.shtaif_cm ?? ''}</td>
       <td>${i.hem_cm ?? ''}</td>
       <td>${i.is_split ? 'כן' : 'לא'}</td>
@@ -52,8 +52,8 @@ export function printWorkOrder(items: WorkItem[]) {
       <td>${SHADING_LABELS[i.subtype ?? ''] ?? i.subtype ?? ''}</td>
       <td>${i.location}</td>
       <td>${i.mount_type ?? ''}</td>
-      <td dir="ltr">${i.width_cm}</td>
-      <td dir="ltr">${i.heights_cm.join(', ')}</td>
+      <td dir="ltr">${i.width_m}</td>
+      <td dir="ltr">${i.heights_m.join(', ')}</td>
       <td>${i.mechanism_side ?? ''}</td>
       <td>${i.color_fabric_text ?? ''}</td>
       <td>${i.notes ?? ''}</td>
@@ -115,7 +115,7 @@ export function printWorkOrder(items: WorkItem[]) {
   <table>
     <thead><tr>
       <th>#</th><th>הזמנה</th><th>לקוח</th><th>מיקום</th><th>סוג תפירה</th>
-      <th>רוחב</th><th>גובה/ים</th><th>שטייף</th><th>מכפלת</th><th>חצוי</th>
+      <th>רוחב (מ׳)</th><th>גובה/ים (מ׳)</th><th>שטייף</th><th>מכפלת</th><th>חצוי</th>
       <th>בד</th><th>הערות</th>
     </tr></thead>
     <tbody>${curtainRows}</tbody>
@@ -126,7 +126,7 @@ export function printWorkOrder(items: WorkItem[]) {
   <table>
     <thead><tr>
       <th>#</th><th>הזמנה</th><th>לקוח</th><th>סוג</th><th>מיקום</th>
-      <th>התקנה</th><th>רוחב</th><th>גובה</th><th>צד מנגנון</th>
+      <th>התקנה</th><th>רוחב (מ׳)</th><th>גובה (מ׳)</th><th>צד מנגנון</th>
       <th>צבע/בד</th><th>הערות</th>
     </tr></thead>
     <tbody>${shadingRows}</tbody>
