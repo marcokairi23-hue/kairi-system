@@ -13,7 +13,7 @@ interface Props {
 
 export default function OrderCardView({ orders, onPayment, onItemStatus, onAdvance }: Props) {
   return (
-    <div className="space-y-3">
+    <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
       {orders.map(o => {
         const paid = (o.payments ?? []).reduce((s, p) => s + p.amount, 0)
         const remaining = o.final_total - paid

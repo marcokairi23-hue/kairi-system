@@ -104,7 +104,7 @@ export default function Dashboard() {
         <div className="text-2xl font-bold text-brand">{fmt(openBalance)}</div>
       </Link>
 
-      <div className="grid grid-cols-3 gap-2 mb-3">
+      <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 mb-3">
         {STATUS_CARDS.map(c => (
           <Link key={c.tab} to={`/orders?tab=${c.tab}`} className="card p-3 hover:shadow-md transition-shadow">
             <div className="text-xl font-bold">{countByStatus(c.status)}</div>
@@ -113,70 +113,73 @@ export default function Dashboard() {
         ))}
       </div>
 
-      {/* הזמנות תקועות */}
-      <div className="card p-4 mb-3">
-        <div className="flex items-center justify-between mb-2">
-          <div className="text-xs font-bold text-slate-500">הזמנות תקועות</div>
-          <div className="flex items-center gap-1 text-xs text-slate-500">
-            <span>סף:</span>
-            {canEditThreshold ? (
-              <input
-                type="number"
-                className="input w-14 py-1 text-xs"
-                value={stuckDaysInput}
-                onChange={e => setStuckDaysInput(e.target.value)}
-                onBlur={saveStuckDays}
-              />
-            ) : (
-              <span className="font-medium">{stuckDays}</span>
-            )}
-            <span>ימים</span>
+      {/* שלושת פאנלי המעקב — מוערמים בנייד, זה-לצד-זה מ-lg ומעלה */}
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-3">
+        {/* הזמנות תקועות */}
+        <div className="card p-4">
+          <div className="flex items-center justify-between mb-2">
+            <div className="text-xs font-bold text-slate-500">הזמנות תקועות</div>
+            <div className="flex items-center gap-1 text-xs text-slate-500">
+              <span>סף:</span>
+              {canEditThreshold ? (
+                <input
+                  type="number"
+                  className="input w-14 py-1 text-xs"
+                  value={stuckDaysInput}
+                  onChange={e => setStuckDaysInput(e.target.value)}
+                  onBlur={saveStuckDays}
+                />
+              ) : (
+                <span className="font-medium">{stuckDays}</span>
+              )}
+              <span>ימים</span>
+            </div>
           </div>
-        </div>
-        {stuckOrders.length === 0 && <p className="text-slate-400 text-sm">אין הזמנות תקועות</p>}
-        {stuckOrders.map(({ order, since }) => (
-          <Link key={order.id} to={`/orders/${order.id}`}
-                className="flex items-center justify-between py-1.5 text-sm border-b border-slate-100 last:border-0">
-            <span>#{order.order_number} {order.customer_name_snapshot}</span>
-            <span className="text-amber-700 text-xs">
-              {Math.floor((now - new Date(since).getTime()) / 86400000)} ימים ללא שינוי
-            </span>
-          </Link>
-        ))}
-      </div>
-
-      {/* בייצור עכשיו */}
-      <div className="card p-4 mb-3">
-        <div className="text-xs font-bold text-slate-500 mb-2">בייצור עכשיו</div>
-        {inProduction.length === 0 && <p className="text-slate-400 text-sm">אין הזמנות בייצור כרגע</p>}
-        {inProduction.map(o => {
-          const prog = calcProgress(o.order_items)
-          return (
-            <Link key={o.id} to={`/orders/${o.id}`} className="block py-2 border-b border-slate-100 last:border-0">
-              <div className="flex items-center justify-between text-sm">
-                <span>#{o.order_number} {o.customer_name_snapshot}</span>
-                <span className={`text-xs px-2 py-0.5 rounded-full ${ORDER_STATUS_COLORS[o.status] ?? 'bg-slate-100'}`}>
-                  {ORDER_STATUS_LABELS[o.status]}
-                </span>
-              </div>
-              <div className="text-xs text-slate-500 mt-1">{prog.label}</div>
+          {stuckOrders.length === 0 && <p className="text-slate-400 text-sm">אין הזמנות תקועות</p>}
+          {stuckOrders.map(({ order, since }) => (
+            <Link key={order.id} to={`/orders/${order.id}`}
+                  className="flex items-center justify-between py-1.5 text-sm border-b border-slate-100 last:border-0">
+              <span>#{order.order_number} {order.customer_name_snapshot}</span>
+              <span className="text-amber-700 text-xs">
+                {Math.floor((now - new Date(since).getTime()) / 86400000)} ימים ללא שינוי
+              </span>
             </Link>
-          )
-        })}
-      </div>
-
-      {/* פעילות אחרונה */}
-      <div className="card p-4 mb-3">
-        <div className="flex items-center justify-between mb-1">
-          <div className="text-xs font-bold text-slate-500">פעילות אחרונה</div>
-          <Link to="/activity" className="text-xs text-brand">כל הפעילות</Link>
+          ))}
         </div>
-        {activity.length === 0 && <p className="text-slate-400 text-sm">אין פעילות</p>}
-        {activity.map(row => <ActivityRowLine key={`${row.source}-${row.id}`} row={row} />)}
+
+        {/* בייצור עכשיו */}
+        <div className="card p-4">
+          <div className="text-xs font-bold text-slate-500 mb-2">בייצור עכשיו</div>
+          {inProduction.length === 0 && <p className="text-slate-400 text-sm">אין הזמנות בייצור כרגע</p>}
+          {inProduction.map(o => {
+            const prog = calcProgress(o.order_items)
+            return (
+              <Link key={o.id} to={`/orders/${o.id}`} className="block py-2 border-b border-slate-100 last:border-0">
+                <div className="flex items-center justify-between text-sm">
+                  <span>#{o.order_number} {o.customer_name_snapshot}</span>
+                  <span className={`text-xs px-2 py-0.5 rounded-full ${ORDER_STATUS_COLORS[o.status] ?? 'bg-slate-100'}`}>
+                    {ORDER_STATUS_LABELS[o.status]}
+                  </span>
+                </div>
+                <div className="text-xs text-slate-500 mt-1">{prog.label}</div>
+              </Link>
+            )
+          })}
+        </div>
+
+        {/* פעילות אחרונה */}
+        <div className="card p-4">
+          <div className="flex items-center justify-between mb-1">
+            <div className="text-xs font-bold text-slate-500">פעילות אחרונה</div>
+            <Link to="/activity" className="text-xs text-brand">כל הפעילות</Link>
+          </div>
+          {activity.length === 0 && <p className="text-slate-400 text-sm">אין פעילות</p>}
+          {activity.map(row => <ActivityRowLine key={`${row.source}-${row.id}`} row={row} />)}
+        </div>
       </div>
 
       {/* קיצורי דרך */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <Link to="/orders/new" className="card p-5 hover:shadow-md transition-shadow
                                           border-2 border-brand">
           <div className="text-lg font-bold text-brand">+ הזמנה חדשה</div>
