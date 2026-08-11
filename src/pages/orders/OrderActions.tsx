@@ -1,7 +1,7 @@
 import { useNavigate } from 'react-router-dom'
 import { printOrder, buildFormFromOrder } from './printOrder'
 import { getSignatureDataUrl } from '../../lib/uploadSignature'
-import { ORDER_STATUS_NEXT, ORDER_STATUS_LABELS, SHADING_LABELS, fmt } from '../../lib/statusHelpers'
+import { ORDER_STATUS_NEXT, ORDER_STATUS_LABELS, SHADING_LABELS, fmt, ACTIVE_ORDER_STATUSES } from '../../lib/statusHelpers'
 
 export interface ActionOrder {
   id: string
@@ -129,10 +129,12 @@ ${paid > 0 ? `שולם: ${fmt(paid)}\nנשאר: ${fmt(remaining)}` : ''}
         💰{!compact && <span className="text-xs">תשלום</span>}
       </button>
 
-      <button className={btn} title="עדכון סטטוס פריטים"
-              onClick={e => { stop(e); onItemStatus() }}>
-        📋{!compact && <span className="text-xs">פריטים</span>}
-      </button>
+      {ACTIVE_ORDER_STATUSES.includes(order.status) && (
+        <button className={btn} title="עדכון סטטוס פריטים"
+                onClick={e => { stop(e); onItemStatus() }}>
+          📋{!compact && <span className="text-xs">פריטים</span>}
+        </button>
+      )}
 
       {nextStatus && (
         <button className={btn}
