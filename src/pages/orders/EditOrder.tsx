@@ -30,6 +30,7 @@ export default function EditOrder() {
   const [existingAgentSignatureUrl, setExistingAgentSignatureUrl] = useState<string | null>(null)
   const [customerSigOpen, setCustomerSigOpen] = useState(false)
   const [agentSigOpen, setAgentSigOpen] = useState(false)
+  const [originalItemIds, setOriginalItemIds] = useState<string[]>([])
 
   useEffect(() => {
     supabase
@@ -41,6 +42,7 @@ export default function EditOrder() {
         if (!data) return
         setOrderNumber(data.order_number ?? 'טיוטה')
         setForm(buildFormFromOrder(data))
+        setOriginalItemIds((data.order_items ?? []).map((i: { id: string }) => i.id))
         setLoading(false)
         if (data.signature_url) {
           getSignatureUrl(data.signature_url).then(setExistingSignatureUrl)
@@ -105,7 +107,7 @@ export default function EditOrder() {
       }
 
       // עדכון הזמנה
-      await supabase.from('orders').update({
+      const { error: orderErr } = await supabase.from('orders').update({
         customer_name_snapshot: form.customer_name,
         phone_snapshot: form.phone,
         address_snapshot: form.address,
@@ -121,53 +123,71 @@ export default function EditOrder() {
         notes: form.notes || null,
         updated_at: new Date().toISOString(),
       }).eq('id', id)
+      if (orderErr) throw orderErr
 
-      // מחיקת פריטים ישנים והוספה מחדש
-      await supabase.from('order_items').delete().eq('order_id', id)
+      // פריטים: UPDATE לקיימים (יש db_id), INSERT לחדשים, DELETE רק לאלו שהוסרו בטופס.
+      // לעולם לא מוחקים+יוצרים מחדש פריט קיים — order_status_history.order_item_id
+      // מצביע עליו בלי CASCADE, ומחיקה כזו הייתה נכשלת בשקט ויוצרת כפילויות (DEFECTS_MAP #5).
+      let sortOrder = 0
 
-      if (form.curtain_items.length > 0) {
-        await supabase.from('order_items').insert(
-          form.curtain_items.map((item, idx) => ({
-            order_id: id,
-            family: 'curtain',
-            production_route: 'internal',
-            location: item.location,
-            width_cm: parseFloat(item.width_cm) || 0,
-            heights_cm: item.heights_cm.split(',').map(h => parseFloat(h.trim())).filter(Boolean),
-            sewing_type: item.sewing_type,
-            hem_cm: parseFloat(item.hem_cm) || 10,
-            shtaif_cm: parseFloat(item.shtaif_cm) || 10,
-            is_split: item.is_split,
-            fabric_text: item.fabric_text || null,
-            price: parseFloat(item.price) || 0,
-            for_execution: item.for_execution,
-            item_status: item.item_status,
-            notes: item.notes || null,
-            sort_order: idx,
-          }))
-        )
+      for (const item of form.curtain_items) {
+        const row = {
+          order_id: id,
+          family: 'curtain',
+          production_route: 'internal',
+          location: item.location,
+          width_cm: parseFloat(item.width_cm) || 0,
+          heights_cm: item.heights_cm.split(',').map(h => parseFloat(h.trim())).filter(Boolean),
+          sewing_type: item.sewing_type,
+          hem_cm: parseFloat(item.hem_cm) || 10,
+          shtaif_cm: parseFloat(item.shtaif_cm) || 10,
+          is_split: item.is_split,
+          fabric_text: item.fabric_text || null,
+          price: parseFloat(item.price) || 0,
+          for_execution: item.for_execution,
+          item_status: item.item_status,
+          notes: item.notes || null,
+          sort_order: sortOrder++,
+        }
+        const { error } = item.db_id
+          ? await supabase.from('order_items').update(row).eq('id', item.db_id)
+          : await supabase.from('order_items').insert(row)
+        if (error) throw error
       }
 
-      if (form.shading_items.length > 0) {
-        await supabase.from('order_items').insert(
-          form.shading_items.map((item, idx) => ({
-            order_id: id,
-            family: 'shading',
-            production_route: 'external',
-            subtype: item.subtype,
-            location: item.location,
-            width_cm: parseFloat(item.width_cm) || 0,
-            heights_cm: item.heights_cm.split(',').map(h => parseFloat(h.trim())).filter(Boolean),
-            mount_type: item.mount_type,
-            mechanism_side: item.mechanism_side,
-            color_fabric_text: item.color_fabric_text || null,
-            price: parseFloat(item.price) || 0,
-            for_execution: item.for_execution,
-            item_status: item.item_status,
-            notes: item.notes || null,
-            sort_order: idx,
-          }))
-        )
+      for (const item of form.shading_items) {
+        const row = {
+          order_id: id,
+          family: 'shading',
+          production_route: 'external',
+          subtype: item.subtype,
+          location: item.location,
+          width_cm: parseFloat(item.width_cm) || 0,
+          heights_cm: item.heights_cm.split(',').map(h => parseFloat(h.trim())).filter(Boolean),
+          mount_type: item.mount_type,
+          mechanism_side: item.mechanism_side,
+          color_fabric_text: item.color_fabric_text || null,
+          price: parseFloat(item.price) || 0,
+          for_execution: item.for_execution,
+          item_status: item.item_status,
+          notes: item.notes || null,
+          sort_order: sortOrder++,
+        }
+        const { error } = item.db_id
+          ? await supabase.from('order_items').update(row).eq('id', item.db_id)
+          : await supabase.from('order_items').insert(row)
+        if (error) throw error
+      }
+
+      // פריטים שהוסרו בטופס (היו ב-DB, לא נותרו בטופס) — נמחקים בנפרד.
+      const remainingIds = new Set([
+        ...form.curtain_items.map(i => i.db_id),
+        ...form.shading_items.map(i => i.db_id),
+      ])
+      const removedIds = originalItemIds.filter(dbId => !remainingIds.has(dbId))
+      if (removedIds.length > 0) {
+        const { error } = await supabase.from('order_items').delete().in('id', removedIds)
+        if (error) throw error
       }
 
       // PDF הציבורי לא מופק מחדש כאן — נשאר קפוא כפי שנוצר, מתעדכן רק בכפתור "סנכרן PDF" בעמוד ההזמנה

@@ -6,6 +6,7 @@ export type ItemStatus = 'new' | 'cut' | 'sewing' | 'ready' | 'installed' | 'can
 
 export interface CurtainItem {
   id: string
+  db_id?: string          // id אמיתי ב-order_items (undefined = פריט חדש שטרם נשמר)
   family: 'curtain'
   location: string
   width_cm: string
@@ -23,6 +24,7 @@ export interface CurtainItem {
 
 export interface ShadingItem {
   id: string
+  db_id?: string          // id אמיתי ב-order_items (undefined = פריט חדש שטרם נשמר)
   family: 'shading'
   subtype: ShadingSubtype
   location: string

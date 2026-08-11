@@ -211,6 +211,7 @@ export function buildFormFromOrder(order: {
   final_total: number
   profiles?: { full_name: string }
   order_items?: Array<{
+    id: string
     family: string
     subtype?: string | null
     location: string
@@ -238,6 +239,7 @@ export function buildFormFromOrder(order: {
     .filter(i => i.family === 'curtain')
     .map(i => ({
       id: uid(),
+      db_id: i.id,
       family: 'curtain' as const,
       location: i.location,
       width_cm: String(i.width_cm),
@@ -257,6 +259,7 @@ export function buildFormFromOrder(order: {
     .filter(i => i.family === 'shading')
     .map(i => ({
       id: uid(),
+      db_id: i.id,
       family: 'shading' as const,
       subtype: (i.subtype ?? 'zebra') as import('./types').ShadingSubtype,
       location: i.location,
