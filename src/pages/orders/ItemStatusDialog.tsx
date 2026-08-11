@@ -81,7 +81,7 @@ export default function ItemStatusDialog({
 
   const itemLabel = (item: DialogItem) => {
     if (item.family === 'curtain') return 'וילון'
-    return SHADING_LABELS[item.subtype ?? ''] ?? 'הצללה'
+    return SHADING_LABELS[item.subtype ?? ''] ?? item.subtype ?? 'הצללה'
   }
 
   return (

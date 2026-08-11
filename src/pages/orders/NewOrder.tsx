@@ -8,7 +8,7 @@ import {
   OrderForm, OrderAccessory,
   emptyForm, newCurtainItem, newShadingItem,
   calcItemsTotal, calcTotalWidth, calcAutoTotal, calcRemaining,
-  PAYMENT_METHODS, SEWING_TYPES,
+  PAYMENT_METHODS, SEWING_TYPES, SHADING_SUBTYPES,
 } from './types'
 import { Field, SummaryBox, BlockHeader } from './FormFields'
 import CurtainCard from './CurtainCard'
@@ -33,6 +33,7 @@ export default function NewOrder() {
   const [agentSigOpen, setAgentSigOpen] = useState(false)
   const sewingTypes = useSettingsList('sewing_types', SEWING_TYPES)
   const paymentMethods = useSettingsList('payment_methods', PAYMENT_METHODS)
+  const shadingSubtypes = useSettingsList('shading_subtypes', SHADING_SUBTYPES)
 
   const setF = (k: keyof OrderForm, v: unknown) => setForm(f => ({ ...f, [k]: v }))
 
@@ -307,7 +308,8 @@ export default function NewOrder() {
             form.shading_items.map((item, i) => (
               <ShadingCard key={item.id} item={item} index={i}
                            onChange={u => updateShading(i, u)}
-                           onRemove={() => removeShading(i)} />
+                           onRemove={() => removeShading(i)}
+                           subtypes={shadingSubtypes} />
             ))
           )}
         </div>

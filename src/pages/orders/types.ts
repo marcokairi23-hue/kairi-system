@@ -1,7 +1,8 @@
 import { uid } from '../../lib/uid'
 
 export type ItemFamily = 'curtain' | 'shading'
-export type ShadingSubtype = 'zebra' | 'venetian' | 'roman' | 'roller'
+// טקסט חופשי (לא enum) — ניתן לעריכה מעמוד ההגדרות, ראו migration 0011.
+export type ShadingSubtype = string
 export type ItemStatus = 'new' | 'cut' | 'sewing' | 'ready' | 'installed' | 'cancelled'
 
 export interface CurtainItem {
@@ -73,12 +74,8 @@ export interface OrderForm {
 }
 
 export const SEWING_TYPES = ['שטוח הפוך', 'קפלים', 'טאבים', 'שרוול', 'אחר']
-export const SHADING_SUBTYPES: { value: ShadingSubtype; label: string }[] = [
-  { value: 'zebra', label: 'זברה' },
-  { value: 'venetian', label: 'ונציאני' },
-  { value: 'roman', label: 'רומי' },
-  { value: 'roller', label: 'גלילה' },
-]
+// ברירת מחדל בלבד — הרשימה בפועל נטענת מ-settings.shading_subtypes (ניתנת לעריכה בהגדרות)
+export const SHADING_SUBTYPES = ['זברה', 'ונציאני', 'רומי', 'גלילה']
 export const MOUNT_TYPES = ['תקרה', 'רגלי קיר']
 export const MECHANISM_SIDES = ['ימין', 'שמאל', 'שני צדדים']
 export const PAYMENT_METHODS = ['מזומן', 'אשראי', 'העברה בנקאית', 'ביט', "צ'ק"]
@@ -114,7 +111,7 @@ export function newShadingItem(): ShadingItem {
   return {
     id: uid(),
     family: 'shading',
-    subtype: 'zebra',
+    subtype: 'זברה',
     location: '',
     width_m: '',
     heights_m: '',

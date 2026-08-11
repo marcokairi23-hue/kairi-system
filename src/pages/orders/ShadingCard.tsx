@@ -6,17 +6,17 @@ interface Props {
   index: number
   onChange: (item: ShadingItem) => void
   onRemove: () => void
+  subtypes?: string[]
 }
 
-export default function ShadingCard({ item, index, onChange, onRemove }: Props) {
+export default function ShadingCard({ item, index, onChange, onRemove, subtypes = SHADING_SUBTYPES }: Props) {
   const set = (k: keyof ShadingItem, v: unknown) => onChange({ ...item, [k]: v })
-  const subtypeLabel = SHADING_SUBTYPES.find(s => s.value === item.subtype)?.label ?? item.subtype
 
   return (
     <div className="border border-orange-200 rounded-lg bg-white overflow-hidden mb-3">
       <div className="bg-orange-50 px-3 py-2 flex items-center justify-between">
         <div className="flex items-center gap-2">
-          <span className="text-xs font-bold text-orange-700">{subtypeLabel} {index + 1}</span>
+          <span className="text-xs font-bold text-orange-700">{item.subtype} {index + 1}</span>
           {item.location && <span className="text-xs text-orange-600">— {item.location}</span>}
         </div>
         <div className="flex items-center gap-3">
@@ -33,7 +33,7 @@ export default function ShadingCard({ item, index, onChange, onRemove }: Props) 
         <Field label="סוג פריט">
           <select className="input" value={item.subtype}
                   onChange={e => set('subtype', e.target.value as ShadingItem['subtype'])}>
-            {SHADING_SUBTYPES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+            {subtypes.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
         </Field>
 

@@ -84,7 +84,7 @@ export default function OrderActions({
       .map(i => {
         const label = i.family === 'curtain'
           ? 'וילון'
-          : SHADING_LABELS[i.subtype ?? ''] ?? 'הצללה'
+          : SHADING_LABELS[i.subtype ?? ''] ?? i.subtype ?? 'הצללה'
         return `• ${label} ${i.location} — ${i.width_m}×${i.heights_m.join('/')} מ׳`
       }).join('\n')
 

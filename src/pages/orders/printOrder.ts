@@ -261,7 +261,7 @@ export function buildFormFromOrder(order: {
       id: uid(),
       db_id: i.id,
       family: 'shading' as const,
-      subtype: (i.subtype ?? 'zebra') as import('./types').ShadingSubtype,
+      subtype: i.subtype ?? 'זברה',
       location: i.location,
       width_m: String(i.width_m),
       heights_m: i.heights_m.join(','),

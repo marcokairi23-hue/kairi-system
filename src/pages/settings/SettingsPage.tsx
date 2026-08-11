@@ -26,6 +26,13 @@ export default function SettingsPage() {
           settingsKey="payment_methods"
           placeholder="אמצעי תשלום חדש..."
         />
+
+        <EditableList
+          title="סוג מוצר הצללה"
+          description="רשימת הבחירה בשדה 'סוג פריט' בטופס הזמנת הצללה (זברה/ונציאני/רומי/גלילה...)."
+          settingsKey="shading_subtypes"
+          placeholder="סוג מוצר חדש..."
+        />
       </div>
     </div>
   )

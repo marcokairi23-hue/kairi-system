@@ -228,7 +228,7 @@ export default function ItemsList() {
   }
 
   const itemTypeLabel = (i: Item) =>
-    i.family === 'curtain' ? 'וילון' : SHADING_LABELS[i.subtype ?? ''] ?? 'הצללה'
+    i.family === 'curtain' ? 'וילון' : SHADING_LABELS[i.subtype ?? ''] ?? i.subtype ?? 'הצללה'
 
   return (
     <div className={selected.size > 0 ? 'pb-24' : ''}>
