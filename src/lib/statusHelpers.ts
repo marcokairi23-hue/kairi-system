@@ -27,6 +27,10 @@ export const ORDER_STATUS_COLORS: Record<string, string> = {
   cancelled: 'bg-red-100 text-red-700',
 }
 
+// הזמנה "פעילה" (יצאה מתהליך המכירה/גבייה, יש לה עבודה בפועל) — משמש למסך הפריטים
+// (DEFECTS_MAP #20): פריט לא אמור להופיע שם כל עוד ההזמנה שלו עדיין quote/pending_payment/draft.
+export const ACTIVE_ORDER_STATUSES = ['ready', 'in_production', 'ready_for_install', 'picked_by_installer', 'completed']
+
 // זרימת הסטטוסים: מה הבא בתור
 export const ORDER_STATUS_NEXT: Record<string, string | undefined> = {
   quote: 'pending_payment',

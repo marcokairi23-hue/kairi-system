@@ -5,7 +5,7 @@ import { useAuth } from '../../lib/auth'
 import BulkActionBar from './BulkActionBar'
 import {
   ITEM_STATUS_LABELS, ITEM_STATUS_COLORS, ITEM_STATUS_ORDER, SHADING_LABELS,
-  ITEM_ROUTE_LABELS, ItemRoute, resolveItemRoute, nextItemStatus,
+  ITEM_ROUTE_LABELS, ItemRoute, resolveItemRoute, nextItemStatus, ACTIVE_ORDER_STATUSES,
 } from '../../lib/statusHelpers'
 import { printWorkOrder } from './printWork'
 import SyncOrderDialog from '../orders/SyncOrderDialog'
@@ -86,8 +86,13 @@ export default function ItemsList() {
       return
     }
 
+    // הזמנה עדיין לא פעילה (draft/quote/pending_payment/cancelled) — הפריט לא אמור להופיע
+    // כאן עד שההזמנה יצאה מגבייה בפועל (DEFECTS_MAP #20).
+    const active = ((data ?? []) as Item[]).filter(i =>
+      ACTIVE_ORDER_STATUSES.includes(i.orders?.status ?? ''))
+
     // מיון: הזמנות חדשות קודם (לפי מספר הזמנה יורד)
-    const sorted = ((data ?? []) as Item[]).sort((a, b) => {
+    const sorted = active.sort((a, b) => {
       const na = a.orders?.order_number ?? 0
       const nb = b.orders?.order_number ?? 0
       if (nb !== na) return nb - na
