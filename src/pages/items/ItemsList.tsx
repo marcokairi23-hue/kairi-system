@@ -39,6 +39,7 @@ interface Item {
     order_number: number | null
     customer_name_snapshot: string
     status: string
+    created_at: string
     profiles?: { full_name: string }
   }
 }
@@ -52,6 +53,16 @@ const TABS: { key: string; label: string; statuses: string[] }[] = [
   { key: 'installed', label: 'הותקן',    statuses: ['installed'] },
 ]
 
+// קיבוץ מסך הפריטים — ניתן להרחיב בהמשך (סוג תפירה/בד/סוכן וכו', לא עכשיו)
+type GroupBy = 'order' | 'date' | 'type'
+const GROUP_LABELS: Record<GroupBy, string> = {
+  order: 'לפי הזמנה',
+  date: 'לפי תאריך',
+  type: 'לפי סוג פריט',
+}
+// סדר קבוע לקיבוץ "לפי סוג פריט"; ערכים שלא ברשימה (subtype חדש שנוסף בהגדרות) נופלים לסוף לפי א"ב
+const TYPE_GROUP_ORDER = ['וילון', 'זברה', 'ונציאני', 'רומי', 'גלילה']
+
 export default function ItemsList() {
   const navigate = useNavigate()
   const { profile } = useAuth()
@@ -59,6 +70,7 @@ export default function ItemsList() {
   const [loading, setLoading] = useState(true)
   const [activeTab, setActiveTab] = useState('all')
   const [activeRoute, setActiveRoute] = useState<'all' | ItemRoute>('all')
+  const [groupBy, setGroupBy] = useState<GroupBy>('order')
   const [advanceItem, setAdvanceItem] = useState<Item | null>(null)
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState<Set<string>>(new Set())
@@ -77,7 +89,7 @@ export default function ItemsList() {
     setLoading(true)
     const { data, error } = await supabase
       .from('order_items')
-      .select('*, orders(order_number, customer_name_snapshot, status, profiles!orders_agent_id_fkey(full_name))')
+      .select('*, orders(order_number, customer_name_snapshot, status, created_at, profiles!orders_agent_id_fkey(full_name))')
 
     if (error) {
       console.error('שגיאה בטעינת פריטים:', error)
@@ -106,6 +118,9 @@ export default function ItemsList() {
 
   useEffect(() => { load() }, [])
 
+  const itemTypeLabel = (i: Item) =>
+    i.family === 'curtain' ? 'וילון' : SHADING_LABELS[i.subtype ?? ''] ?? i.subtype ?? 'הצללה'
+
   const filtered = useMemo(() => {
     const tab = TABS.find(t => t.key === activeTab)!
     return items.filter(i => {
@@ -126,6 +141,61 @@ export default function ItemsList() {
   }, [items, activeTab, activeRoute, search])
 
   const allSelected = filtered.length > 0 && selected.size === filtered.length
+
+  // חלוקת filtered לקבוצות תצוגה לפי groupBy — לא משפיע על בחירה/פעולות, רק על הצגה
+  const grouped = useMemo(() => {
+    if (groupBy === 'order') {
+      const map = new Map<string, { label: string; sortKey: number; items: Item[] }>()
+      for (const i of filtered) {
+        const key = i.order_id
+        if (!map.has(key)) {
+          map.set(key, {
+            label: `#${i.orders?.order_number ?? '—'} — ${i.orders?.customer_name_snapshot ?? ''}`,
+            sortKey: i.orders?.order_number ?? 0,
+            items: [],
+          })
+        }
+        map.get(key)!.items.push(i)
+      }
+      return Array.from(map.values()).sort((a, b) => b.sortKey - a.sortKey)
+    }
+
+    if (groupBy === 'date') {
+      const map = new Map<string, { label: string; items: Item[] }>()
+      for (const i of filtered) {
+        const d = i.orders?.created_at ? new Date(i.orders.created_at) : null
+        const key = d ? d.toISOString().slice(0, 10) : 'unknown'
+        if (!map.has(key)) {
+          map.set(key, {
+            label: d ? d.toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit', year: 'numeric' }) : 'ללא תאריך',
+            items: [],
+          })
+        }
+        map.get(key)!.items.push(i)
+      }
+      return Array.from(map.entries())
+        .sort(([a], [b]) => b.localeCompare(a))
+        .map(([, g]) => g)
+    }
+
+    // type — משפחת פריט (וילון/הצללה), כשהצללה מפורטת לפי subtype
+    const map = new Map<string, Item[]>()
+    for (const i of filtered) {
+      const key = itemTypeLabel(i)
+      if (!map.has(key)) map.set(key, [])
+      map.get(key)!.push(i)
+    }
+    return Array.from(map.entries())
+      .sort(([a], [b]) => {
+        const ia = TYPE_GROUP_ORDER.indexOf(a)
+        const ib = TYPE_GROUP_ORDER.indexOf(b)
+        if (ia === -1 && ib === -1) return a.localeCompare(b)
+        if (ia === -1) return 1
+        if (ib === -1) return -1
+        return ia - ib
+      })
+      .map(([label, items]) => ({ label, items }))
+  }, [filtered, groupBy])
 
   const toggle = (id: string) => {
     const next = new Set(selected)
@@ -227,9 +297,6 @@ export default function ItemsList() {
     printWorkOrder(chosen)
   }
 
-  const itemTypeLabel = (i: Item) =>
-    i.family === 'curtain' ? 'וילון' : SHADING_LABELS[i.subtype ?? ''] ?? i.subtype ?? 'הצללה'
-
   return (
     <div className={selected.size > 0 ? 'pb-24' : ''}>
       <div className="flex items-center justify-between mb-4">
@@ -275,6 +342,21 @@ export default function ItemsList() {
         ))}
       </div>
 
+      {/* קיבוץ תצוגה */}
+      <div className="flex items-center gap-1 mb-3">
+        <span className="text-xs text-slate-400">קיבוץ:</span>
+        {(Object.keys(GROUP_LABELS) as GroupBy[]).map(g => (
+          <button key={g} onClick={() => setGroupBy(g)}
+                  className={`px-3 py-1 rounded-full text-xs font-medium transition-colors ${
+                    groupBy === g
+                      ? 'bg-slate-700 text-white'
+                      : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50'
+                  }`}>
+            {GROUP_LABELS[g]}
+          </button>
+        ))}
+      </div>
+
       {err && (
         <div className="card p-4 mb-3 text-red-600 text-sm">{err}</div>
       )}
@@ -299,67 +381,75 @@ export default function ItemsList() {
             בחר הכל
           </label>
 
-          <div className="divide-y">
-            {filtered.map(i => (
-              <div key={i.id}
-                   className={`flex items-center gap-2 p-3 hover:bg-slate-50 ${
-                     selected.has(i.id) ? 'bg-brand-light' : ''
-                   }`}>
-                <input type="checkbox" checked={selected.has(i.id)}
-                       onChange={() => toggle(i.id)}
-                       className="w-4 h-4 shrink-0" />
-
-                <div className="flex-1 min-w-0 cursor-pointer"
-                     onClick={() => navigate(`/orders/${i.order_id}`)}>
-                  <div className="flex items-center gap-2 flex-wrap">
-                    <span className="font-mono text-xs text-brand font-bold">
-                      #{i.orders?.order_number ?? '—'}
-                    </span>
-                    <span className="text-sm font-medium truncate">
-                      {i.orders?.customer_name_snapshot}
-                    </span>
-                    {!i.for_execution && (
-                      <span className="text-xs text-slate-400">(לא לביצוע)</span>
-                    )}
-                  </div>
-
-                  <div className="text-xs text-slate-600 mt-0.5 flex items-center gap-1">
-                    <span>{itemTypeLabel(i)} — {i.location}</span>
-                    <span className={`px-1.5 py-0.5 rounded text-[10px] ${
-                      resolveItemRoute(i.production_route, i.family) === 'cutter'
-                        ? 'bg-purple-100 text-purple-700'
-                        : 'bg-blue-100 text-blue-700'
-                    }`}>
-                      {ITEM_ROUTE_LABELS[resolveItemRoute(i.production_route, i.family)]}
-                    </span>
-                  </div>
-
-                  <div className="text-xs text-slate-400 flex flex-wrap gap-x-2 mt-0.5">
-                    <span dir="ltr">{i.width_m}×{i.heights_m.join('/')} מ׳</span>
-                    {i.sewing_type && <span>{i.sewing_type}</span>}
-                    {i.fabric_text && <span>בד: {i.fabric_text}</span>}
-                    {i.color_fabric_text && <span>{i.color_fabric_text}</span>}
-                  </div>
-                </div>
-
-                <div className="flex flex-col items-end gap-1 shrink-0">
-                  <span className={`text-xs px-2 py-0.5 rounded-full ${
-                    ITEM_STATUS_COLORS[i.item_status] ?? 'bg-slate-100'
-                  }`}>
-                    {ITEM_STATUS_LABELS[i.item_status] ?? i.item_status}
-                  </span>
-                  {nextItemStatus(resolveItemRoute(i.production_route, i.family), i.item_status) && (
-                    <button
-                      className="text-xs text-brand hover:underline"
-                      onClick={() => setAdvanceItem(i)}
-                    >
-                      ▶ קדם
-                    </button>
-                  )}
-                </div>
+          {grouped.map(g => (
+            <div key={g.label}>
+              <div className="bg-slate-100 px-3 py-1.5 text-xs font-bold text-slate-600 flex items-center justify-between">
+                <span>{g.label}</span>
+                <span className="opacity-60 font-normal">{g.items.length}</span>
               </div>
-            ))}
-          </div>
+              <div className="divide-y">
+                {g.items.map(i => (
+                  <div key={i.id}
+                       className={`flex items-center gap-2 p-3 hover:bg-slate-50 ${
+                         selected.has(i.id) ? 'bg-brand-light' : ''
+                       }`}>
+                    <input type="checkbox" checked={selected.has(i.id)}
+                           onChange={() => toggle(i.id)}
+                           className="w-4 h-4 shrink-0" />
+
+                    <div className="flex-1 min-w-0 cursor-pointer"
+                         onClick={() => navigate(`/orders/${i.order_id}`)}>
+                      <div className="flex items-center gap-2 flex-wrap">
+                        <span className="font-mono text-xs text-brand font-bold">
+                          #{i.orders?.order_number ?? '—'}
+                        </span>
+                        <span className="text-sm font-medium truncate">
+                          {i.orders?.customer_name_snapshot}
+                        </span>
+                        {!i.for_execution && (
+                          <span className="text-xs text-slate-400">(לא לביצוע)</span>
+                        )}
+                      </div>
+
+                      <div className="text-xs text-slate-600 mt-0.5 flex items-center gap-1">
+                        <span>{itemTypeLabel(i)} — {i.location}</span>
+                        <span className={`px-1.5 py-0.5 rounded text-[10px] ${
+                          resolveItemRoute(i.production_route, i.family) === 'cutter'
+                            ? 'bg-purple-100 text-purple-700'
+                            : 'bg-blue-100 text-blue-700'
+                        }`}>
+                          {ITEM_ROUTE_LABELS[resolveItemRoute(i.production_route, i.family)]}
+                        </span>
+                      </div>
+
+                      <div className="text-xs text-slate-400 flex flex-wrap gap-x-2 mt-0.5">
+                        <span dir="ltr">{i.width_m}×{i.heights_m.join('/')} מ׳</span>
+                        {i.sewing_type && <span>{i.sewing_type}</span>}
+                        {i.fabric_text && <span>בד: {i.fabric_text}</span>}
+                        {i.color_fabric_text && <span>{i.color_fabric_text}</span>}
+                      </div>
+                    </div>
+
+                    <div className="flex flex-col items-end gap-1 shrink-0">
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${
+                        ITEM_STATUS_COLORS[i.item_status] ?? 'bg-slate-100'
+                      }`}>
+                        {ITEM_STATUS_LABELS[i.item_status] ?? i.item_status}
+                      </span>
+                      {nextItemStatus(resolveItemRoute(i.production_route, i.family), i.item_status) && (
+                        <button
+                          className="text-xs text-brand hover:underline"
+                          onClick={() => setAdvanceItem(i)}
+                        >
+                          ▶ קדם
+                        </button>
+                      )}
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          ))}
         </div>
       )}
 
