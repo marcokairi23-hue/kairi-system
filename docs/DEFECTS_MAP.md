@@ -113,6 +113,7 @@
 - **מיקום:** `pg_policies` על `public.order_status_history`.
 - **התנהגות מצופה:** הגבלת כתיבה/קריאה של היסטוריה לפי אותה בעלות שחלה על ה-`orders`/`order_items` המקושרים, כדי למנוע זיוף רשומות ביקורת (audit trail) עבור הזמנות שאינן שייכות למשתמש.
 - **חומרה:** משבש (פרצת אמינות ביומן פעילות/ביקורת)
+- **סטטוס:** ✅ תוקן (11.08.2026, `supabase/migrations/0009_history_rls_ownership.sql`) — `hist_read`/`hist_insert` הוחלפו ב-`office_history` (admin/office — גישה מלאה) ו-`sales_history` (sales — רק אם `orders.agent_id = auth.uid()`), אותו דפוס בעלות שכבר קיים ב-`sales_items`/`sales_order_accessories`. אומת מול `pg_policies` בפועל.
 - **ראיה:** `qual`/`with_check`: `"(auth.uid() IS NOT NULL)"` בלבד, ללא join ל-`orders`.
 
 ### 16. פונקציית allocate_order_number (SECURITY DEFINER) ניתנת להרצה גם ע"י anon
