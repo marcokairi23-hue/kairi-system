@@ -6,9 +6,10 @@ interface Props {
   index: number
   onChange: (item: CurtainItem) => void
   onRemove: () => void
+  sewingTypes?: string[]
 }
 
-export default function CurtainCard({ item, index, onChange, onRemove }: Props) {
+export default function CurtainCard({ item, index, onChange, onRemove, sewingTypes = SEWING_TYPES }: Props) {
   const set = (k: keyof CurtainItem, v: unknown) => onChange({ ...item, [k]: v })
 
   return (
@@ -52,7 +53,7 @@ export default function CurtainCard({ item, index, onChange, onRemove }: Props) 
         <Field label="סוג תפירה">
           <select className="input" value={item.sewing_type}
                   onChange={e => set('sewing_type', e.target.value)}>
-            {SEWING_TYPES.map(t => <option key={t}>{t}</option>)}
+            {sewingTypes.map(t => <option key={t}>{t}</option>)}
           </select>
         </Field>
 

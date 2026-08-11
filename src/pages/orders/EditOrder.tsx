@@ -3,10 +3,11 @@ import { useNavigate, useParams } from 'react-router-dom'
 import { useAuth } from '../../lib/auth'
 import { supabase } from '../../lib/supabase'
 import { uid } from '../../lib/uid'
+import { useSettingsList } from '../../lib/useSettingsList'
 import {
   OrderForm, emptyForm,
   calcItemsTotal, calcTotalWidth, calcAutoTotal, calcRemaining,
-  PAYMENT_METHODS, CurtainItem, ShadingItem, OrderAccessory,
+  PAYMENT_METHODS, SEWING_TYPES, CurtainItem, ShadingItem, OrderAccessory,
   newCurtainItem, newShadingItem, ITEM_STATUSES,
 } from './types'
 import { Field, SummaryBox, BlockHeader } from './FormFields'
@@ -31,6 +32,8 @@ export default function EditOrder() {
   const [customerSigOpen, setCustomerSigOpen] = useState(false)
   const [agentSigOpen, setAgentSigOpen] = useState(false)
   const [originalItemIds, setOriginalItemIds] = useState<string[]>([])
+  const sewingTypes = useSettingsList('sewing_types', SEWING_TYPES)
+  const paymentMethods = useSettingsList('payment_methods', PAYMENT_METHODS)
 
   useEffect(() => {
     supabase
@@ -249,7 +252,8 @@ export default function EditOrder() {
             : form.curtain_items.map((item, i) => (
               <CurtainCard key={item.id} item={item} index={i}
                            onChange={u => updateCurtain(i, u)}
-                           onRemove={() => removeCurtain(i)} />
+                           onRemove={() => removeCurtain(i)}
+                           sewingTypes={sewingTypes} />
             ))}
         </div>
       </div>
@@ -351,7 +355,7 @@ export default function EditOrder() {
               <select className="input" value={form.payment_method}
                       onChange={e => setF('payment_method', e.target.value)}>
                 <option value="">בחר...</option>
-                {PAYMENT_METHODS.map(m => <option key={m}>{m}</option>)}
+                {paymentMethods.map(m => <option key={m}>{m}</option>)}
               </select>
             </Field>
           </div>
