@@ -103,10 +103,13 @@ ${paid > 0 ? `שולם: ${fmt(paid)}\nנשאר: ${fmt(remaining)}` : ''}
 
   const btn = compact
     ? 'w-8 h-8 grid place-items-center rounded-md hover:bg-slate-100 text-base'
-    : 'flex-1 py-1.5 rounded-md hover:bg-slate-100 text-sm flex items-center justify-center gap-1'
+    // min-w במקום flex-1 בלבד: flex-1 לבדו לא מצטמצם מתחת לרוחב התוכן הטבעי שלו
+    // (min-width: auto כברירת מחדל), מה שגרם לגלישה אופקית של כל העמוד במסך אייפון
+    // (390px) — 7 כפתורים בשורה אחת לא נכנסים. flex-wrap בהורה + min-w פה פותרים.
+    : 'flex-1 min-w-[70px] py-1.5 rounded-md hover:bg-slate-100 text-sm flex items-center justify-center gap-1'
 
   return (
-    <div className={compact ? 'flex items-center gap-0.5' : 'flex items-center gap-1 border-t pt-2 mt-2'}>
+    <div className={compact ? 'flex items-center gap-0.5' : 'flex flex-wrap items-center gap-1 border-t pt-2 mt-2'}>
       <button className={btn} title="הדפס ללקוח" onClick={e => doPrint(e, true)}>
         🖨️{!compact && <span className="text-xs">הדפס</span>}
       </button>

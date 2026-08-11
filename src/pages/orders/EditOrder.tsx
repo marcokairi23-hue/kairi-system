@@ -209,7 +209,7 @@ export default function EditOrder() {
   if (loading) return <div className="text-slate-500 p-4">טוען...</div>
 
   return (
-    <div className="max-w-2xl mx-auto pb-20">
+    <div className="pb-20">
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-xl font-bold">עריכת הזמנה #{orderNumber}</h1>
         <button onClick={() => navigate(`/orders/${id}`)} className="btn-ghost text-sm">← חזרה</button>

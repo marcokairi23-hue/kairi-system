@@ -24,7 +24,8 @@ export default function BulkActionBar({ count, onApplyStatus, onPrintWork, onCle
 
   return (
     <div className="fixed bottom-0 right-0 left-0 z-40 bg-white border-t shadow-lg">
-      <div className="mx-auto max-w-2xl px-4 py-3">
+      {/* אותו רוחב אדפטיבי כמו Layout.tsx (main), כדי להתיישר עם התוכן מעליו */}
+      <div className="mx-auto max-w-2xl md:max-w-3xl lg:max-w-4xl xl:max-w-5xl px-4 py-3">
         <div className="flex items-center gap-2 flex-wrap">
           <span className="text-sm font-bold text-brand shrink-0">
             {count} נבחרו

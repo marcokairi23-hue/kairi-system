@@ -230,7 +230,7 @@ export default function NewOrder() {
   }
 
   return (
-    <div className="max-w-2xl mx-auto pb-20">
+    <div className="pb-20">
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-xl font-bold">הזמנה חדשה</h1>
         <button onClick={() => navigate('/orders')} className="btn-ghost text-sm">← חזרה</button>
