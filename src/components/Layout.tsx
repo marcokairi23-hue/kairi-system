@@ -6,6 +6,7 @@ const navItems = [
   { to: '/', label: 'ראשי', end: true },
   { to: '/orders', label: 'הזמנות' },
   { to: '/items', label: 'פריטים' },
+  { to: '/production', label: 'לוח ייצור - בדיקה' },
   { to: '/fabrics', label: 'בדים' },
   { to: '/activity', label: 'יומן פעילות' },
 ]

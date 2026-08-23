@@ -10,6 +10,7 @@ import NewOrder from './pages/orders/NewOrder'
 import OrderDetail from './pages/orders/OrderDetail'
 import EditOrder from './pages/orders/EditOrder'
 import ItemsList from './pages/items/ItemsList'
+import ProductionBoard from './pages/items/ProductionBoard'
 import ActivityLog from './pages/activity/ActivityLog'
 import UsersList from './pages/users/UsersList'
 import SettingsPage from './pages/settings/SettingsPage'
@@ -39,6 +40,7 @@ export default function App() {
         <Route path="/orders/:id" element={<OrderDetail />} />
         <Route path="/orders/:id/edit" element={<EditOrder />} />
         <Route path="/items" element={<ItemsList />} />
+        <Route path="/production" element={<ProductionBoard />} />
         <Route path="/activity" element={<ActivityLog />} />
         <Route path="/users" element={profile?.role === 'admin' ? <UsersList /> : <Navigate to="/" replace />} />
         <Route path="/settings" element={profile?.role === 'admin' ? <SettingsPage /> : <Navigate to="/" replace />} />
