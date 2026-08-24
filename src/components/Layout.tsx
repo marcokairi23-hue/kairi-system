@@ -25,10 +25,16 @@ export default function Layout({ children }: { children: ReactNode }) {
     production: useFeature('production'),
     fabrics: useFeature('fabrics'),
     activityLog: useFeature('activityLog'),
+    screenManager: useFeature('screenManager'),
   }
 
   const items: NavItem[] = (profile?.role === 'admin'
-    ? [...navItems, { to: '/users', label: 'משתמשים' }, { to: '/settings', label: 'הגדרות' }]
+    ? [
+        ...navItems,
+        { to: '/users', label: 'משתמשים' },
+        { to: '/settings', label: 'הגדרות' },
+        { to: '/screen-manager', label: 'ניהול מסכים', featureKey: 'screenManager' },
+      ]
     : navItems
   ).filter((item) => !item.featureKey || featureVisible[item.featureKey])
 

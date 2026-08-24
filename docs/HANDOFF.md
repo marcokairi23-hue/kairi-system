@@ -4,7 +4,34 @@
 
 ## מצב עבודה נוכחי (24.08.2026)
 
-**ספרינט B2 (אכיפת feature flags ברמת routes) הושלם — המנגנון כעת מלא (navbar + routes).** ראו סעיף למטה, ולפניו 0013, B1 ו-A. הניסוי העיצובי ב-`ProductionBoard.tsx` (מוזכר למטה) עדיין בעצירה — לא נגעתי בו.
+**ספרינט C (מסך ניהול מסכים) הושלם — זו נקודת הסיום של פרויקט ה-feature flags** (תשתית + אכיפה + UI). ראו סעיף למטה, ולפניו 0013, B2, B1, A. הניסוי העיצובי ב-`ProductionBoard.tsx` (מוזכר למטה) עדיין בעצירה — לא נגעתי בו.
+
+### ספרינט C — מסך ניהול מסכים (24.08.2026)
+
+מה נעשה:
+- `src/lib/featureFlags.tsx` הורחב: `refresh()`, `setFlagEnabled(key, enabled_global)`, `setPermissionAllowed(featureKey, role, allowed)` — כתיבה אופטימיסטית ל-state המשותף (navbar/routes/מסך הניהול כולם קוראים מאותו context, כך שהם מתעדכנים מיד בלי refetch/רענון דף) + rollback אם ה-DB write נכשל. `evaluateFeature` יוצא (exported) לשימוש בתצוגה המקדימה. hook חדש `useFeatureFlagsAdmin()`.
+- `src/pages/admin/ScreenManager.tsx` (חדש) — accordion של 11 המסכים (ממוינים לפי sort_order), עם קומפוננטות מקוננות תחתם (למשל dashboard + 7 קומפוננטות). כל כרטיס: badge פעיל/כבוי, מספר תפקידים מורשים, סוויצ' גלובלי (נעול/מושבת ל-is_locked), 4 pills הרשאה (admin/office/sales/viewer), חיווי שמירה זמני (שומר.../✓ נשמר/שגיאה), ותג "✓/✗ נראה ל-&lt;role&gt;" לפי בורר תפקיד לתצוגה מקדימה (מבוסס `evaluateFeature` על ה-state החי — לא סימולציה נפרדת).
+- `src/App.tsx` — route חדש `/screen-manager` עטוף ב-`FeatureRoute featureKey="screenManager"`.
+- `src/components/Layout.tsx` — נוסף פריט navbar "ניהול מסכים" (admin בלבד, כמו users/settings), מסונן גם דרך `useFeature('screenManager')`.
+- עיצוב: נשען על `.card`/`.btn-*` הקיימים ב-`index.css` וצבעי `brand`/`brand-dark` הקיימים ב-`tailwind.config.js` — לא הוצגו צבעים/סגנונות חדשים.
+
+**באג אבטחה אמיתי שנמצא ותוקן (אושר עם מרקו לפני התיקון):**
+ה-`useFeature`/`evaluateFeature` שנכתבו בספרינט A מימשו את `is_locked` כ"return true ללא תלות ב-role" — מילולית לפי הספרינט ("מסך מערכת תמיד גלוי"). בפועל זה אומר ש-`screenManager` (המסך הנעול היחיד ב-seed) היה **נגיש דרך URL ישיר (`/screen-manager`) לכל משתמש מחובר**, לא רק לאדמין — למרות ש-`feature_permissions` אומר office/sales/viewer=✗, ולמרות שספרינט B2 עצמו הניח בטעות ש"is_locked יבטיח שרק אדמין נכנס". התיקון: הוסר קיצור-הדרך; `is_locked` כבר לא עוקף את בדיקת ה-role — הבדיקה תמיד רצה מול `feature_permissions` (fail-open נשאר כרגיל אם אין שורה). הבאג היחיד שנפגע ממנו בפועל: `screenManager` (כרגע ה-feature היחיד עם `is_locked=true`). תוקן ב-`src/lib/featureFlags.tsx`.
+
+פלט קריטריון קבלה:
+```
+npm run build → ✓ built in 15.28s (tsc + vite build עברו נקי, אחרי התיקון)
+```
+תיאור התנהגות (לאימות ידני של מרקו):
+- כניסה כאדמין ל"ניהול מסכים" → 11 מסכים, dashboard עם 7 קומפוננטות מקוננות.
+- הזזת סוויצ' items ל-ON → אמור להופיע מיד ב-navbar (state משותף דרך context, בלי רענון דף).
+- הזזה חזרה ל-OFF → אמור להיעלם מיד.
+- screenManager מוצג עם סוויצ' נעול (אפור, מושבת) ו-pill admin נעול-דלוק; office/sales/viewer מוצגים ✗ ולא ניתנים לשינוי דרך URL (אחרי התיקון לעיל).
+- **טרם בוצעה בדיקה ידנית בדפדפן בפועל** — התיאור לעיל מבוסס על קריאת הקוד/לוגיקה, לא הרצה. מרקו מתבקש לאמת ולוודא להחזיר items ל-OFF בסוף הבדיקה כדי לא להשאיר את ה-seed משובש.
+
+**זו נקודת הסיום של פרויקט ה-feature flags** (ספרינטים A, B1, B2, מיגרציה 0013, C). המנגנון מלא: תשתית DB, אכיפה ב-navbar+routes, ו-UI ניהול חי.
+
+**עצירה.**
 
 ### ספרינט B2 — אכיפת feature flags ברמת ה-routes (24.08.2026)
 
