@@ -1,5 +1,7 @@
+import { ReactNode } from 'react'
 import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './lib/auth'
+import { useFeature } from './lib/featureFlags'
 import Layout from './components/Layout'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
@@ -15,8 +17,16 @@ import ActivityLog from './pages/activity/ActivityLog'
 import UsersList from './pages/users/UsersList'
 import SettingsPage from './pages/settings/SettingsPage'
 
+// שומר route: מרנדר את children רק אם useFeature(featureKey) === true,
+// אחרת מפנה ל-"/". "/" (dashboard) עצמו לא עטוף בשומר הזה כדי לא ליצור
+// redirect-loop אם dashboard אי-פעם יכובה.
+function FeatureRoute({ featureKey, children }: { featureKey: string; children: ReactNode }) {
+  const allowed = useFeature(featureKey)
+  return allowed ? <>{children}</> : <Navigate to="/" replace />
+}
+
 export default function App() {
-  const { session, loading, profile } = useAuth()
+  const { session, loading } = useAuth()
 
   if (loading) {
     return (
@@ -32,18 +42,18 @@ export default function App() {
     <Layout>
       <Routes>
         <Route path="/" element={<Dashboard />} />
-        <Route path="/fabrics" element={<FabricsList />} />
-        <Route path="/fabrics/new" element={<FabricForm />} />
-        <Route path="/fabrics/:id" element={<FabricForm />} />
-        <Route path="/orders" element={<OrdersList />} />
-        <Route path="/orders/new" element={<NewOrder />} />
-        <Route path="/orders/:id" element={<OrderDetail />} />
-        <Route path="/orders/:id/edit" element={<EditOrder />} />
-        <Route path="/items" element={<ItemsList />} />
-        <Route path="/production" element={<ProductionBoard />} />
-        <Route path="/activity" element={<ActivityLog />} />
-        <Route path="/users" element={profile?.role === 'admin' ? <UsersList /> : <Navigate to="/" replace />} />
-        <Route path="/settings" element={profile?.role === 'admin' ? <SettingsPage /> : <Navigate to="/" replace />} />
+        <Route path="/fabrics" element={<FeatureRoute featureKey="fabrics"><FabricsList /></FeatureRoute>} />
+        <Route path="/fabrics/new" element={<FeatureRoute featureKey="fabrics"><FabricForm /></FeatureRoute>} />
+        <Route path="/fabrics/:id" element={<FeatureRoute featureKey="fabrics"><FabricForm /></FeatureRoute>} />
+        <Route path="/orders" element={<FeatureRoute featureKey="orders"><OrdersList /></FeatureRoute>} />
+        <Route path="/orders/new" element={<FeatureRoute featureKey="newOrder"><NewOrder /></FeatureRoute>} />
+        <Route path="/orders/:id" element={<FeatureRoute featureKey="orderDetail"><OrderDetail /></FeatureRoute>} />
+        <Route path="/orders/:id/edit" element={<FeatureRoute featureKey="orderDetail"><EditOrder /></FeatureRoute>} />
+        <Route path="/items" element={<FeatureRoute featureKey="items"><ItemsList /></FeatureRoute>} />
+        <Route path="/production" element={<FeatureRoute featureKey="production"><ProductionBoard /></FeatureRoute>} />
+        <Route path="/activity" element={<FeatureRoute featureKey="activityLog"><ActivityLog /></FeatureRoute>} />
+        <Route path="/users" element={<FeatureRoute featureKey="users"><UsersList /></FeatureRoute>} />
+        <Route path="/settings" element={<FeatureRoute featureKey="settings"><SettingsPage /></FeatureRoute>} />
         <Route path="*" element={<Navigate to="/" replace />} />
       </Routes>
     </Layout>

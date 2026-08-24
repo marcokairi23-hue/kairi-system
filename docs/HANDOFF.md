@@ -4,7 +4,35 @@
 
 ## מצב עבודה נוכחי (24.08.2026)
 
-**מיגרציה 0013 (users+settings ל-feature flags) הושלמה.** ראו סעיף למטה, ולפניו B1 ו-A. הניסוי העיצובי ב-`ProductionBoard.tsx` (מוזכר למטה) עדיין בעצירה — לא נגעתי בו.
+**ספרינט B2 (אכיפת feature flags ברמת routes) הושלם — המנגנון כעת מלא (navbar + routes).** ראו סעיף למטה, ולפניו 0013, B1 ו-A. הניסוי העיצובי ב-`ProductionBoard.tsx` (מוזכר למטה) עדיין בעצירה — לא נגעתי בו.
+
+### ספרינט B2 — אכיפת feature flags ברמת ה-routes (24.08.2026)
+
+מה נעשה (רק ב-`src/App.tsx`, לא נגעתי ב-Layout/hook/מסכים):
+- רכיב הגנה `FeatureRoute({ featureKey, children })` — קורא `useFeature(featureKey)`, מרנדר את `children` אם true, אחרת `<Navigate to="/" replace />`.
+- כל route (מלבד `/` ו-`*`) עטוף ב-`FeatureRoute` עם ה-key התואם: fabrics/fabrics-new/fabrics-:id→`fabrics`, orders→`orders`, orders/new→`newOrder`, orders/:id ו-orders/:id/edit→`orderDetail`, items→`items`, production→`production`, activity→`activityLog`, users→`users`, settings→`settings`.
+- **`/users` ו-`/settings`**: הוחלף הצ'ק הישן `profile?.role==='admin' ? ... : <Navigate/>` ב-`FeatureRoute` — עכשיו נאכף דרך `feature_permissions` (שנזרעו במיגרציה 0013), לא hardcoded בקוד.
+- **`/` (dashboard) לא עטוף בכוונה** — אם היה עטוף וייחסם, ה-redirect שלו הוא ל-"/" עצמו → redirect-loop. הוחלט (החלטה טכנית, לא עסקית) להשאיר את הדף הראשי כ"נחלת מילוט" בלתי-חסומה; dashboard מורשה היום לכל 4 התפקידים כך שאין השפעה בפועל כרגע.
+
+**הכרעה לגבי 3 sub-routes בלי key עצמאי, אושרה עם מרקו לפני ביצוע:**
+`/fabrics/new`, `/fabrics/:id` → מפתח `fabrics` (המסך-אב); `/orders/:id/edit` → מפתח `orderDetail` (המסך-אב). לא נוסף key חדש ל-DB.
+
+`screenManager` נשאר בלי route (כמו newOrder/production בהחלטת B1 — שם אין key בלי route; הפעם ההפך: יש key, אין route. לא נוצר route חדש).
+
+פלט קריטריון קבלה:
+```
+npm run build → ✓ built in 14.58s (tsc + vite build עברו נקי)
+```
+תיאור התנהגות (לפי seed נוכחי: items/fabrics = enabled_global=false):
+- ניווט ישיר ל-`/items` → redirect ל-`/`, ItemsList לא נטען.
+- ניווט ישיר ל-`/fabrics` (וגם `/fabrics/new`, `/fabrics/:id`) → redirect ל-`/`.
+- ניווט ל-`/orders` → נטען כרגיל (מורשה, דלוק).
+
+מה **לא** נעשה:
+- לא נוצר מסך "אין הרשאה" — redirect שקט ל-`/` בלבד (כפי שההוראות אפשרו כברירת מחדל בהיעדר מסך כזה בפרויקט).
+- מסך ניהול המסכים (feature_flags CRUD ב-UI) — ספרינט C, עדיין לא הותחל.
+
+**עצירה. לא הותחל C — ממתין לאישור מפורש.**
 
 ### מיגרציה 0013 — users + settings ב-feature flags (24.08.2026)
 
