@@ -1,21 +1,36 @@
 import { ReactNode } from 'react'
 import { NavLink } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
+import { useFeature } from '../lib/featureFlags'
 
-const navItems = [
-  { to: '/', label: 'ראשי', end: true },
-  { to: '/orders', label: 'הזמנות' },
-  { to: '/items', label: 'פריטים' },
-  { to: '/production', label: 'לוח ייצור - בדיקה' },
-  { to: '/fabrics', label: 'בדים' },
-  { to: '/activity', label: 'יומן פעילות' },
+interface NavItem { to: string; label: string; end?: boolean; featureKey?: string }
+
+const navItems: NavItem[] = [
+  { to: '/', label: 'ראשי', end: true, featureKey: 'dashboard' },
+  { to: '/orders', label: 'הזמנות', featureKey: 'orders' },
+  { to: '/items', label: 'פריטים', featureKey: 'items' },
+  { to: '/production', label: 'לוח ייצור - בדיקה', featureKey: 'production' },
+  { to: '/fabrics', label: 'בדים', featureKey: 'fabrics' },
+  { to: '/activity', label: 'יומן פעילות', featureKey: 'activityLog' },
 ]
 
 export default function Layout({ children }: { children: ReactNode }) {
   const { profile, signOut } = useAuth()
-  const items = profile?.role === 'admin'
+
+  // hooks נקראים כאן בסדר קבוע (רשימת navItems קבועה) — לא בתוך .map/.filter
+  const featureVisible: Record<string, boolean> = {
+    dashboard: useFeature('dashboard'),
+    orders: useFeature('orders'),
+    items: useFeature('items'),
+    production: useFeature('production'),
+    fabrics: useFeature('fabrics'),
+    activityLog: useFeature('activityLog'),
+  }
+
+  const items: NavItem[] = (profile?.role === 'admin'
     ? [...navItems, { to: '/users', label: 'משתמשים' }, { to: '/settings', label: 'הגדרות' }]
     : navItems
+  ).filter((item) => !item.featureKey || featureVisible[item.featureKey])
 
   return (
     <div className="min-h-screen flex flex-col">

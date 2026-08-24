@@ -4,7 +4,32 @@
 
 ## מצב עבודה נוכחי (24.08.2026)
 
-**ספרינט A (תשתית Feature Flags) הושלם.** ראו סעיף למטה. הניסוי העיצובי ב-`ProductionBoard.tsx` (מוזכר למטה) עדיין בעצירה — לא נגעתי בו בספרינט הזה כלל.
+**ספרינט B1 (אכיפת feature flags ב-navbar) הושלם.** ראו סעיף למטה, ולפניו סעיף ספרינט A. הניסוי העיצובי ב-`ProductionBoard.tsx` (מוזכר למטה) עדיין בעצירה — לא נגעתי בו בספרינט הזה כלל.
+
+### ספרינט B1 — אכיפת feature flags ב-navbar (24.08.2026)
+
+מה נעשה:
+- `src/components/Layout.tsx` — כל פריט ב-`navItems` קיבל `featureKey`, ונוסף `useFeature(...)` נקרא פעם אחת לכל אחד מ-6 המפתחות (סדר קבוע, לא בתוך loop/map — שומר על rules-of-hooks). רשימת ה-items מסוננת לפי `featureVisible[featureKey]`. סדר הפריטים, העיצוב והטקסט לא שונו.
+- לא נגעתי ב-routing, במסכים עצמם, או ב-`featureFlags.tsx`.
+
+**שני פערים שהתגלו מול טיוטת הספרינט, שאושרו עם מרקו לפני ביצוע:**
+1. פריטי "משתמשים" (`/users`) ו"הגדרות" (`/settings`) — קיימים ב-navbar (admin בלבד) אבל **אין להם key ב-feature_flags בכלל**. הוחלט: להשאירם כמו שהיו, בלי חיווט feature-flag (`featureKey` לא מוגדר להם → מוצגים תמיד לפי תנאי ה-`role==='admin'` הקיים).
+2. `newOrder` ו-`screenManager` — יש להם key ב-feature_flags (מספרינט A), אבל **אין להם פריט navbar בפועל** (אין קישור "הזמנה חדשה" או "ניהול מסכים" בתפריט). הוחלט: לדלג — לא נוסף פריט navbar חדש. חוותט רק 6 הפריטים הקיימים: dashboard/orders/items/production/fabrics/activityLog.
+
+פלט קריטריון קבלה:
+```
+npm run build → ✓ built in 14.04s (tsc + vite build עברו נקי)
+```
+תיאור התנהגות (לפי ה-seed הנוכחי מספרינט A: items ו-fabrics הם enabled_global=false):
+- **items** ו-**fabrics** נעלמים מה-navbar לכל התפקידים (בדוק ב-`featureVisible` → `enabled_global=false` גובר).
+- **dashboard, orders, production, activityLog** מוצגים למשתמשי admin/office (וגם sales/viewer לפי טבלת ההרשאות מספרינט A, למעט production ל-sales/viewer).
+- לאדמין, ה-navbar בפועל מציג: **ראשי, הזמנות, לוח ייצור - בדיקה, יומן פעילות, משתמשים, הגדרות** — בלי פריטים, בלי בדים. (אין "הזמנה חדשה"/"ניהול מסכים" כי אין להם פריט navbar כלל, ראה פער #2 למעלה.)
+
+מה **לא** נעשה (בכוונה):
+- routes לא נגעו — ניווט ישיר ב-URL ל-`/items`, `/fabrics` וכו' עדיין עובד. זה מתוקן ב-B2.
+- לא נוסף פריט navbar ל-newOrder/screenManager.
+
+**עצירה. לא הותחל B2 — ממתין לאישור מפורש.**
 
 ### ספרינט A — תשתית Feature Flags (24.08.2026)
 
