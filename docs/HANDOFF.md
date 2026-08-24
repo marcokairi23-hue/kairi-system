@@ -4,7 +4,22 @@
 
 ## מצב עבודה נוכחי (24.08.2026)
 
-**ספרינט B1 (אכיפת feature flags ב-navbar) הושלם.** ראו סעיף למטה, ולפניו סעיף ספרינט A. הניסוי העיצובי ב-`ProductionBoard.tsx` (מוזכר למטה) עדיין בעצירה — לא נגעתי בו בספרינט הזה כלל.
+**מיגרציה 0013 (users+settings ל-feature flags) הושלמה.** ראו סעיף למטה, ולפניו B1 ו-A. הניסוי העיצובי ב-`ProductionBoard.tsx` (מוזכר למטה) עדיין בעצירה — לא נגעתי בו.
+
+### מיגרציה 0013 — users + settings ב-feature flags (24.08.2026)
+
+מה נעשה (seed בלבד, אין שינוי קוד):
+- `supabase/migrations/0013_users_settings_flags.sql` — הוסיף 2 מסכים (`users`="משתמשים", `settings`="הגדרות") ל-`feature_flags` (both in_navbar=true, is_locked=false, enabled_global=true) + 8 שורות הרשאה ב-`feature_permissions`: `users` = admin בלבד; `settings` = admin+office. הוחל בפועל על ה-DB המרוחק (`ipcnyqkcvbvzmasmzaur`) דרך Supabase MCP.
+- `src/components/Layout.tsx` **לא נגעתי** — הפריטים "משתמשים"/"הגדרות" עדיין מחווטים רק לפי `role==='admin'` בקוד, לא דרך `useFeature`. יש להם כבר key/הרשאות ב-DB אך אין עדיין חיווט ב-navbar (זה המצב שהיה גם קודם — הפער ידוע, מטופל בספרינט עתידי).
+
+פלט קריטריון קבלה (מול ה-DB המרוחק בפועל):
+```
+screens=11, permissions=76
+users.enabled_global    = true ✓
+settings.enabled_global = true ✓
+```
+
+**עצירה. ממתין לאישור לפני B2.**
 
 ### ספרינט B1 — אכיפת feature flags ב-navbar (24.08.2026)
 
