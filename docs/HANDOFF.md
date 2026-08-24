@@ -2,9 +2,42 @@
 
 > **הוראות שימוש:** הדבק את המסמך הזה בתחילת שיחה חדשה עם כל כלי AI. זו נקודת הכניסה — היא מפנה לשלושה מסמכים נוספים שמכילים את הפירוט המלא.
 
-## מצב עבודה נוכחי (23.08.2026)
+## מצב עבודה נוכחי (24.08.2026)
 
-**בעצירה, ממתין להנחיות.** נבנה `src/pages/items/ProductionBoard.tsx` (route `/production`, קישור ב-nav "לוח ייצור - בדיקה") כניסוי עיצובי לפי פרויקט ה-Design "Curtains order system redesign". מרקו עצר את העבודה במכוון: הכיוון העיצובי הרחב עומד להתהפך — במקום redesign, חזרה לרפליקה קרובה של המערכת הקיימת עם שדרוגי workflow מינוריים בלבד. **אין commit** — כל השינויים עדיין ב-working tree. פרטים מלאים: `SPEC.md` §4.10, `WORKPLAN.md` §8 (23.08.2026). לפני שממשיכים — לבדוק אם הגיעו הנחיות עיצוב חדשות וגורפות; אם לא, לא להניח כלום ולשאול.
+**ספרינט A (תשתית Feature Flags) הושלם.** ראו סעיף למטה. הניסוי העיצובי ב-`ProductionBoard.tsx` (מוזכר למטה) עדיין בעצירה — לא נגעתי בו בספרינט הזה כלל.
+
+### ספרינט A — תשתית Feature Flags (24.08.2026)
+
+מה נוצר:
+- `supabase/migrations/0012_feature_flags.sql` — טבלאות `feature_flags` + `feature_permissions`, RLS (read=authenticated, write=admin בלבד דרך `current_role()`), seed מלא. **הוחל בפועל על ה-DB המרוחק** (`ipcnyqkcvbvzmasmzaur`) דרך Supabase MCP `apply_migration` — לא רק קובץ מקומי.
+- `src/lib/featureFlags.tsx` — `FeatureFlagsProvider` (טוען את שתי הטבלאות פעם אחת) + hook `useFeature(key)` עם לוגיקת fail-open לפי הספק.
+- `src/main.tsx` — `FeatureFlagsProvider` עטוף בתוך `AuthProvider` (תלוי ב-role). שום מסך/navbar/route לא נגעו בו.
+
+**סטייה מטיוטת הספרינט המקורית (אושרה עם מרקו לפני ביצוע):**
+1. **תפקידים**: הטיוטה ביקשה `admin/office/agent/viewer/installer`. בפועל ב-DB/`types.ts`/`PERMISSIONS_MAP.md` התפקידים הם `admin/office/sales/viewer` — אין `agent`/`installer` בשום מקום. הוחלט להשתמש בתפקידים הקיימים בפועל (agent→sales מופה, installer הושמט לגמרי). כתוצאה מכך `feature_permissions` מכיל **68 שורות** (17 פיצ'רים × 4 תפקידים), לא 85.
+2. **מספור מיגרציה**: `0004` תפוס כבר פעמיים בפועל (`0004_order_pdfs_bucket.sql`, `0004_status_flow.sql`); המיגרציה האחרונה בפועל הייתה `0011`. נכתב `0012_feature_flags.sql` במקום `0004`.
+
+פלט קריטריון קבלה (מול ה-DB המרוחק בפועל):
+```
+screens=9, components=8, permissions=68
+orderDetail.in_navbar = false ✓
+screenManager.is_locked = true ✓
+npm run build → ✓ built in 32.43s (tsc + vite build עברו נקי)
+```
+
+מה **לא** נעשה (בכוונה — ספרינט B):
+- אכיפה בפועל: אף מסך/navbar/route לא משתמש ב-`useFeature` עדיין. שום דבר ויזואלי לא השתנה.
+- לא נוצר תפקיד `installer` ב-DB/UI — אם יידרש בעתיד, צריך migration נפרד ל-`user_role` enum + `profiles` + כל ה-RLS הרלוונטי, לא רק ל-feature_flags.
+
+**עצירה. לא הותחל ספרינט B — ממתין לאישור מפורש.**
+
+---
+
+## מצב קודם (23.08.2026, עדיין רלוונטי)
+
+**בעצירה, ממתין להנחיות.** נבנה `src/pages/items/ProductionBoard.tsx` (route `/production`, קישור ב-nav "לוח ייצור - בדיקה") כניסוי עיצובי לפי פרויקט ה-Design "Curtains order system redesign". מרקו עצר את העבודה במכוון: הכיוון העיצובי הרחב עומד להתהפך — במקום redesign, חזרה לרפליקה קרובה של המערכת הקיימת עם שדרוגי workflow מינוריים בלבד. פרטים מלאים: `SPEC.md` §4.10, `WORKPLAN.md` §8 (23.08.2026). לפני שממשיכים — לבדוק אם הגיעו הנחיות עיצוב חדשות וגורפות; אם לא, לא להניח כלום ולשאול.
+
+(הערה: המסמך הזה הפנה בעבר ל-`PROJECT.md`/`ARCHITECTURE.md` שאינם קיימים בפועל ב-`docs/` — קיימים במקום זאת `SPEC.md`, `WORKPLAN.md`, `BUSINESS.md`, `PERMISSIONS_MAP.md`. סעיף "סדר קריאה" למטה טעון עדכון בנפרד.)
 
 ## מה הפרויקט
 
