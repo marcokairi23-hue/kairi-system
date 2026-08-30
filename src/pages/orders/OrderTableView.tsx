@@ -1,4 +1,5 @@
 import { useNavigate } from 'react-router-dom'
+import { ArrowUp, ArrowDown } from 'lucide-react'
 import OrderActions, { ActionOrder } from './OrderActions'
 import {
   ORDER_STATUS_LABELS, ORDER_STATUS_COLORS, calcProgress, fmt,
@@ -27,7 +28,11 @@ export default function OrderTableView({
     } ${className}`}
         onClick={sk ? () => onSort(sk) : undefined}>
       {label}
-      {sk && sortKey === sk && <span className="mr-1">{sortAsc ? '▲' : '▼'}</span>}
+      {sk && sortKey === sk && (
+        <span className="mr-1 inline-flex align-middle">
+          {sortAsc ? <ArrowUp className="w-3.5 h-3.5" /> : <ArrowDown className="w-3.5 h-3.5" />}
+        </span>
+      )}
     </th>
   )
 

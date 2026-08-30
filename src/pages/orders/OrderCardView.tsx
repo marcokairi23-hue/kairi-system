@@ -1,4 +1,5 @@
 import { Link } from 'react-router-dom'
+import { TriangleAlert } from 'lucide-react'
 import OrderActions, { ActionOrder } from './OrderActions'
 import {
   ORDER_STATUS_LABELS, ORDER_STATUS_COLORS, calcProgress, fmt,
@@ -46,12 +47,12 @@ export default function OrderCardView({ orders, onPayment, onItemStatus, onAdvan
               {prog.total > 0 && (
                 <div className="mt-3">
                   <div className="flex justify-between text-xs mb-1">
-                    <span className={
+                    <span className={`inline-flex items-center gap-1 ${
                       prog.isComplete ? 'text-green-700 font-medium'
                       : prog.isPartial ? 'text-amber-700 font-medium'
                       : 'text-slate-500'
-                    }>
-                      {prog.isPartial && '⚠️ '}{prog.label}
+                    }`}>
+                      {prog.isPartial && <TriangleAlert className="w-3.5 h-3.5" />}{prog.label}
                     </span>
                     <span className="text-slate-400">{prog.percent}%</span>
                   </div>

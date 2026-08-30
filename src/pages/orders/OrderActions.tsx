@@ -1,7 +1,8 @@
 import { useNavigate } from 'react-router-dom'
+import { Printer, Wrench, MessageCircle, Pencil, Wallet, ClipboardList, ArrowLeft } from 'lucide-react'
 import { printOrder, buildFormFromOrder } from './printOrder'
 import { getSignatureDataUrl } from '../../lib/uploadSignature'
-import { ORDER_STATUS_NEXT, ORDER_STATUS_LABELS, SHADING_LABELS, fmt, ACTIVE_ORDER_STATUSES } from '../../lib/statusHelpers'
+import { ORDER_STATUS_NEXT, ORDER_STATUS_LABELS, SHADING_LABELS, fmt } from '../../lib/statusHelpers'
 
 export interface ActionOrder {
   id: string
@@ -102,40 +103,45 @@ ${paid > 0 ? `שולם: ${fmt(paid)}\nנשאר: ${fmt(remaining)}` : ''}
   }
 
   const btn = compact
-    ? 'w-8 h-8 grid place-items-center rounded-md hover:bg-slate-100 text-base'
+    ? 'w-8 h-8 grid place-items-center rounded-md hover:bg-slate-100'
     // min-w במקום flex-1 בלבד: flex-1 לבדו לא מצטמצם מתחת לרוחב התוכן הטבעי שלו
     // (min-width: auto כברירת מחדל), מה שגרם לגלישה אופקית של כל העמוד במסך אייפון
     // (390px) — 7 כפתורים בשורה אחת לא נכנסים. flex-wrap בהורה + min-w פה פותרים.
     : 'flex-1 min-w-[70px] py-1.5 rounded-md hover:bg-slate-100 text-sm flex items-center justify-center gap-1'
 
+  // כל האייקונים בצבע ה-brand (כמו ה-nav bar), 18px — עקבי בין תצוגת כרטיסיות לרשימה.
+  const icon = 'w-[18px] h-[18px] text-brand'
+
   return (
     <div className={compact ? 'flex items-center gap-0.5' : 'flex flex-wrap items-center gap-1 border-t pt-2 mt-2'}>
       <button className={btn} title="הדפס ללקוח" onClick={e => doPrint(e, true)}>
-        🖨️{!compact && <span className="text-xs">הדפס</span>}
+        <Printer className={icon} />{!compact && <span className="text-xs">הדפס</span>}
       </button>
 
       <button className={btn} title="הוראות עבודה" onClick={e => doPrint(e, false)}>
-        🔧{!compact && <span className="text-xs">עבודה</span>}
+        <Wrench className={icon} />{!compact && <span className="text-xs">עבודה</span>}
       </button>
 
       <button className={btn} title="שלח ב-WhatsApp" onClick={doWhatsApp}>
-        💬{!compact && <span className="text-xs">שלח</span>}
+        <MessageCircle className={icon} />{!compact && <span className="text-xs">שלח</span>}
       </button>
 
       <button className={btn} title="עריכה"
               onClick={e => { stop(e); navigate(`/orders/${order.id}/edit`) }}>
-        ✏️{!compact && <span className="text-xs">ערוך</span>}
+        <Pencil className={icon} />{!compact && <span className="text-xs">ערוך</span>}
       </button>
 
       <button className={btn} title="הוספת תשלום"
               onClick={e => { stop(e); onPayment() }}>
-        💰{!compact && <span className="text-xs">תשלום</span>}
+        <Wallet className={icon} />{!compact && <span className="text-xs">תשלום</span>}
       </button>
 
-      {ACTIVE_ORDER_STATUSES.includes(order.status) && (
-        <button className={btn} title="עדכון סטטוס פריטים"
+      {/* מוצג בדיוק כמו "קדם" (nextStatus קיים) — כדי לבחון אותו כתחלופה מעשית לקידום
+          סטטוס ההזמנה, כולל בשני הסטטוסים שבהם רק "קדם" הופיע עד כה: quote/pending_payment. */}
+      {nextStatus && (
+        <button className={btn} title="פריטים בהזמנה"
                 onClick={e => { stop(e); onItemStatus() }}>
-          📋{!compact && <span className="text-xs">פריטים</span>}
+          <ClipboardList className={icon} />{!compact && <span className="text-xs">פריטים</span>}
         </button>
       )}
 
@@ -143,7 +149,7 @@ ${paid > 0 ? `שולם: ${fmt(paid)}\nנשאר: ${fmt(remaining)}` : ''}
         <button className={btn}
                 title={`קדם ל: ${ORDER_STATUS_LABELS[nextStatus]}`}
                 onClick={e => { stop(e); onAdvance() }}>
-          ➡️{!compact && <span className="text-xs">קדם</span>}
+          <ArrowLeft className={icon} />{!compact && <span className="text-xs">קדם</span>}
         </button>
       )}
     </div>

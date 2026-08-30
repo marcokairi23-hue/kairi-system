@@ -1,5 +1,6 @@
 import { useEffect, useMemo, useState } from 'react'
 import { Link, useSearchParams } from 'react-router-dom'
+import { LayoutGrid, List } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/auth'
 import OrderCardView from './OrderCardView'
@@ -10,13 +11,15 @@ import SyncItemsDialog from './SyncItemsDialog'
 import SyncOrderDialog from './SyncOrderDialog'
 import { ActionOrder } from './OrderActions'
 import {
-  ORDER_STATUS_NEXT, ORDER_TO_ITEM_STATUS, suggestOrderStatus,
+  ORDER_STATUS_NEXT, ORDER_TO_ITEM_STATUS, suggestOrderStatus, fmt,
 } from '../../lib/statusHelpers'
 
 type Order = ActionOrder & { created_at: string }
 type SortKey = 'order_number' | 'customer' | 'created_at' | 'total' | 'status'
 type ViewMode = 'cards' | 'table'
 
+// כולל balance/quote — משמש ללוגיקת הסינון (filtered) בלבד. שני אלה לא
+// מוצגים בשורת הטאבים (PILL_TABS למטה); הם מוצגים ככרטיסיות נפרדות.
 const TABS: { key: string; label: string; statuses: string[] }[] = [
   { key: 'all',        label: 'כל ההזמנות',   statuses: [] },
   { key: 'balance',    label: 'יתרה פתוחה',   statuses: [] },
@@ -27,6 +30,10 @@ const TABS: { key: string; label: string; statuses: string[] }[] = [
   { key: 'installable', label: 'מוכן',         statuses: ['ready_for_install'] },
   { key: 'completed',  label: 'הושלמו',        statuses: ['completed'] },
 ]
+
+// טאבי סטטוס ההזמנה — כרטיסיות-משנה מתחת ל-3 הכרטיסיות הראשיות
+// (הכל/יתרה פתוחה/הצעות מחיר), שיצאו מכאן ל-TOP_CARDS למטה.
+const STATUS_CARDS = TABS.filter(t => !['all', 'balance', 'quote'].includes(t.key))
 
 const VIEW_KEY = 'kairi_orders_view'
 
@@ -234,6 +241,14 @@ export default function OrdersList() {
     return 'partial'
   }
 
+  // נתוני שתי הכרטיסיות שיצאו משורת הטאבים (יתרה פתוחה / הצעות מחיר)
+  const balanceOrders = useMemo(() => orders.filter(hasOpenBalance), [orders])
+  const openBalanceTotal = useMemo(
+    () => balanceOrders.reduce((sum, o) => sum + (o.final_total - paidOf(o)), 0),
+    [balanceOrders]
+  )
+  const quoteCount = useMemo(() => orders.filter(o => o.status === 'quote').length, [orders])
+
   const agentOptions = useMemo(() => {
     const map = new Map<string, string>()
     orders.forEach(o => {
@@ -291,13 +306,13 @@ export default function OrdersList() {
         <div className="flex items-center gap-2">
           <div className="flex bg-white border border-slate-200 rounded-lg overflow-hidden">
             <button onClick={() => setViewMode('cards')} title="כרטיסיות"
-                    className={`px-2.5 py-1.5 text-sm ${
+                    className={`px-2.5 py-1.5 grid place-items-center ${
                       view === 'cards' ? 'bg-brand text-white' : 'text-slate-500 hover:bg-slate-50'
-                    }`}>▦</button>
+                    }`}><LayoutGrid className="w-4 h-4" /></button>
             <button onClick={() => setViewMode('table')} title="רשימה"
-                    className={`px-2.5 py-1.5 text-sm ${
+                    className={`px-2.5 py-1.5 grid place-items-center ${
                       view === 'table' ? 'bg-brand text-white' : 'text-slate-500 hover:bg-slate-50'
-                    }`}>☰</button>
+                    }`}><List className="w-4 h-4" /></button>
           </div>
           <Link to="/orders/new" className="btn-primary">+ חדשה</Link>
         </div>
@@ -306,6 +321,61 @@ export default function OrdersList() {
       <input className="input mb-4"
              placeholder="חיפוש לפי שם לקוח, טלפון או מספר..."
              value={search} onChange={e => setSearch(e.target.value)} />
+
+      {/* 3 כרטיסיות ראשיות: הכל / יתרה פתוחה / הצעות מחיר */}
+      <div className="grid grid-cols-3 gap-2 mb-3">
+        <button onClick={() => setActiveTab('all')}
+                className={`card p-3 text-right transition-colors ${
+                  activeTab === 'all' ? 'ring-2 ring-brand' : 'hover:shadow-md'
+                }`}>
+          <div className="text-xs font-bold text-slate-500 mb-1">כל ההזמנות</div>
+          <div className="text-lg font-bold">{orders.length}</div>
+        </button>
+
+        <button onClick={() => setActiveTab('balance')}
+                className={`card p-3 text-right transition-colors ${
+                  activeTab === 'balance' ? 'ring-2 ring-brand' : 'hover:shadow-md'
+                }`}>
+          <div className="text-xs font-bold text-slate-500 mb-1">יתרה פתוחה</div>
+          <div className="flex items-baseline justify-between gap-2">
+            <span className="text-lg font-bold text-amber-700">{fmt(openBalanceTotal)}</span>
+            <span className="text-xs text-slate-400">{balanceOrders.length}</span>
+          </div>
+        </button>
+
+        <button onClick={() => setActiveTab('quote')}
+                className={`card p-3 text-right transition-colors ${
+                  activeTab === 'quote' ? 'ring-2 ring-brand' : 'hover:shadow-md'
+                }`}>
+          <div className="text-xs font-bold text-slate-500 mb-1">הצעות מחיר</div>
+          <div className="text-lg font-bold text-brand">{quoteCount}</div>
+        </button>
+      </div>
+
+      {/* כרטיסיות-משנה לפי סטטוס — מוזחות (border-r + pr-4), כמו נטינג
+          מסך/קומפוננטה ב-ScreenManager, כדי שיהיה ברור שהן כפופות ל-3
+          הכרטיסיות שמעליהן ולא באותה רמה. גדולות יותר מ-pill רגיל, אבל
+          עדיין קטנות מהכרטיסיות הראשיות (padding/פונט קטנים יותר). */}
+      <div className="pr-4 border-r-2 border-slate-200 mb-4">
+        <div className="text-xs text-slate-400 mb-1.5">לפי סטטוס</div>
+        <div className="grid grid-cols-2 sm:grid-cols-5 gap-2">
+          {STATUS_CARDS.map(t => (
+            <button key={t.key} onClick={() => setActiveTab(t.key)}
+                    className={`card p-2.5 text-right transition-colors ${
+                      activeTab === t.key ? 'ring-2 ring-brand' : 'hover:shadow-sm'
+                    }`}>
+              <div className={`text-xs font-medium mb-0.5 ${
+                activeTab === t.key ? 'text-brand' : 'text-slate-500'
+              }`}>
+                {t.label}
+              </div>
+              <div className="text-base font-bold">
+                {orders.filter(o => t.statuses.includes(o.status)).length}
+              </div>
+            </button>
+          ))}
+        </div>
+      </div>
 
       <div className="flex flex-wrap items-center gap-2 mb-4">
         {agentOptions.length > 1 && (
@@ -335,22 +405,6 @@ export default function OrdersList() {
         {(agentFilter || paymentFilter || dateFrom || dateTo) && (
           <button className="btn-ghost text-sm" onClick={clearFilters}>נקה סינון</button>
         )}
-      </div>
-
-      <div className="flex gap-1 overflow-x-auto pb-2 mb-4">
-        {TABS.map(t => (
-          <button key={t.key} onClick={() => setActiveTab(t.key)}
-                  className={`shrink-0 px-3 py-1.5 rounded-full text-sm font-medium transition-colors ${
-                    activeTab === t.key
-                      ? 'bg-brand text-white'
-                      : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'
-                  }`}>
-            {t.label}
-            <span className="mr-1 text-xs opacity-70">
-              ({orders.filter(o => t.key === 'balance' ? hasOpenBalance(o) : (!t.statuses.length || t.statuses.includes(o.status))).length})
-            </span>
-          </button>
-        ))}
       </div>
 
       {loading && <div className="text-slate-500">טוען הזמנות...</div>}

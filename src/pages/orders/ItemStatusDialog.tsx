@@ -1,9 +1,11 @@
 import { useState } from 'react'
+import { Printer } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/auth'
 import {
   ITEM_STATUS_LABELS, ITEM_STATUS_COLORS, ITEM_STATUS_ORDER, SHADING_LABELS,
 } from '../../lib/statusHelpers'
+import { printWorkOrder } from '../items/printWork'
 
 export interface DialogItem {
   id: string
@@ -14,6 +16,16 @@ export interface DialogItem {
   heights_m: number[]
   item_status: string
   for_execution: boolean
+  // שדות נוספים — נדרשים רק לשם הדפסת דוח עבודה (printWorkOrder), לא לתצוגת הדיאלוג עצמה
+  sewing_type?: string | null
+  hem_cm?: number | null
+  shtaif_cm?: number | null
+  is_split?: boolean | null
+  fabric_text?: string | null
+  mount_type?: string | null
+  mechanism_side?: string | null
+  color_fabric_text?: string | null
+  notes?: string | null
 }
 
 interface Props {
@@ -77,6 +89,31 @@ export default function ItemStatusDialog({
 
     onSaved()
     onClose()
+  }
+
+  const doPrintWork = () => {
+    if (selected.size === 0) return
+    const chosen = active.filter(i => selected.has(i.id))
+    printWorkOrder(chosen.map(i => ({
+      family: i.family,
+      subtype: i.subtype ?? null,
+      location: i.location,
+      width_m: i.width_m,
+      heights_m: i.heights_m,
+      sewing_type: i.sewing_type ?? null,
+      hem_cm: i.hem_cm ?? null,
+      shtaif_cm: i.shtaif_cm ?? null,
+      is_split: i.is_split ?? null,
+      fabric_text: i.fabric_text ?? null,
+      mount_type: i.mount_type ?? null,
+      mechanism_side: i.mechanism_side ?? null,
+      color_fabric_text: i.color_fabric_text ?? null,
+      notes: i.notes ?? null,
+      orders: {
+        order_number: typeof orderNumber === 'number' ? orderNumber : null,
+        customer_name_snapshot: customerName,
+      },
+    })))
   }
 
   const itemLabel = (item: DialogItem) => {
@@ -161,6 +198,15 @@ export default function ItemStatusDialog({
               {busy ? '...' : `עדכן (${selected.size})`}
             </button>
           </div>
+
+          {/* הדפסת דוח עבודה על הפריטים המסומנים — אותו מסמך כמו במסך "פריטים" (printWork.ts),
+              נבחן זמנית לצד כפתור "קדם" ב-OrderActions כדי להשוות שימוש בפועל בין השניים. */}
+          <button className="w-full flex items-center justify-center gap-1.5 text-sm
+                             text-brand hover:underline mt-3 disabled:text-slate-300 disabled:no-underline"
+                  disabled={selected.size === 0}
+                  onClick={doPrintWork}>
+            <Printer className="w-4 h-4" /> הדפסת דוח עבודה ({selected.size})
+          </button>
 
           <button className="w-full text-center text-sm text-slate-500 hover:text-slate-700 mt-3"
                   onClick={onClose}>
