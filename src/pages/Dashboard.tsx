@@ -4,6 +4,7 @@ import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { ActivityRow, ActivityRowLine, fetchActivity } from './activity/ActivityLog'
 import { ORDER_STATUS_LABELS, ORDER_STATUS_COLORS, calcProgress, fmt } from '../lib/statusHelpers'
+import { useFeature } from '../lib/featureFlags'
 
 const STATUS_CARDS: { tab: string; status: string }[] = [
   { tab: 'quote', status: 'quote' },
@@ -30,6 +31,15 @@ interface DashOrder {
 export default function Dashboard() {
   const { profile } = useAuth()
   const canEditThreshold = profile?.role === 'admin'
+
+  // hooks נקראים כאן בסדר קבוע (7 המפתחות הקבועים תחת dashboard) — לא בתוך .map/.filter
+  const showBalance = useFeature('balance')
+  const showStatusCards = useFeature('statusCards')
+  const showNewOrderBtn = useFeature('newOrderBtn')
+  const showStuck = useFeature('stuck')
+  const showInProduction = useFeature('inProduction')
+  const showRecentActivity = useFeature('recentActivity')
+  const showShortcuts = useFeature('shortcuts')
 
   const [orders, setOrders] = useState<DashOrder[]>([])
   const [lastChange, setLastChange] = useState<Map<string, string>>(new Map())
@@ -99,116 +109,136 @@ export default function Dashboard() {
       <p className="text-slate-500 mb-6">מה עושים היום?</p>
 
       {/* יתרות + סטטוסים */}
-      <Link to="/orders?tab=balance" className="card p-4 mb-3 block hover:shadow-md transition-shadow">
-        <div className="text-xs font-bold text-slate-500 mb-1">יתרות פתוחות לגבייה</div>
-        <div className="text-2xl font-bold text-brand">{fmt(openBalance)}</div>
-      </Link>
+      {showBalance && (
+        <Link to="/orders?tab=balance" className="card p-4 mb-3 block hover:shadow-md transition-shadow">
+          <div className="text-xs font-bold text-slate-500 mb-1">יתרות פתוחות לגבייה</div>
+          <div className="text-2xl font-bold text-brand">{fmt(openBalance)}</div>
+        </Link>
+      )}
 
-      <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 mb-3">
-        {STATUS_CARDS.map(c => (
-          <Link key={c.tab} to={`/orders?tab=${c.tab}`} className="card p-3 hover:shadow-md transition-shadow">
-            <div className="text-xl font-bold">{countByStatus(c.status)}</div>
-            <div className="text-xs text-slate-500">{ORDER_STATUS_LABELS[c.status]}</div>
-          </Link>
-        ))}
-      </div>
-
-      {/* שלושת פאנלי המעקב — מוערמים בנייד, זה-לצד-זה מ-lg ומעלה */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-3">
-        {/* הזמנות תקועות */}
-        <div className="card p-4">
-          <div className="flex items-center justify-between mb-2">
-            <div className="text-xs font-bold text-slate-500">הזמנות תקועות</div>
-            <div className="flex items-center gap-1 text-xs text-slate-500">
-              <span>סף:</span>
-              {canEditThreshold ? (
-                <input
-                  type="number"
-                  className="input w-14 py-1 text-xs"
-                  value={stuckDaysInput}
-                  onChange={e => setStuckDaysInput(e.target.value)}
-                  onBlur={saveStuckDays}
-                />
-              ) : (
-                <span className="font-medium">{stuckDays}</span>
-              )}
-              <span>ימים</span>
-            </div>
-          </div>
-          {stuckOrders.length === 0 && <p className="text-slate-400 text-sm">אין הזמנות תקועות</p>}
-          {stuckOrders.map(({ order, since }) => (
-            <Link key={order.id} to={`/orders/${order.id}`}
-                  className="flex items-center justify-between py-1.5 text-sm border-b border-slate-100 last:border-0">
-              <span>#{order.order_number} {order.customer_name_snapshot}</span>
-              <span className="text-amber-700 text-xs">
-                {Math.floor((now - new Date(since).getTime()) / 86400000)} ימים ללא שינוי
-              </span>
+      {showStatusCards && (
+        <div className="grid grid-cols-3 sm:grid-cols-6 gap-2 mb-3">
+          {STATUS_CARDS.map(c => (
+            <Link key={c.tab} to={`/orders?tab=${c.tab}`} className="card p-3 hover:shadow-md transition-shadow">
+              <div className="text-xl font-bold">{countByStatus(c.status)}</div>
+              <div className="text-xs text-slate-500">{ORDER_STATUS_LABELS[c.status]}</div>
             </Link>
           ))}
         </div>
+      )}
 
-        {/* בייצור עכשיו */}
-        <div className="card p-4">
-          <div className="text-xs font-bold text-slate-500 mb-2">בייצור עכשיו</div>
-          {inProduction.length === 0 && <p className="text-slate-400 text-sm">אין הזמנות בייצור כרגע</p>}
-          {inProduction.map(o => {
-            const prog = calcProgress(o.order_items)
-            return (
-              <Link key={o.id} to={`/orders/${o.id}`} className="block py-2 border-b border-slate-100 last:border-0">
-                <div className="flex items-center justify-between text-sm">
-                  <span>#{o.order_number} {o.customer_name_snapshot}</span>
-                  <span className={`text-xs px-2 py-0.5 rounded-full ${ORDER_STATUS_COLORS[o.status] ?? 'bg-slate-100'}`}>
-                    {ORDER_STATUS_LABELS[o.status]}
-                  </span>
+      {/* שלושת פאנלי המעקב — מוערמים בנייד, זה-לצד-זה מ-lg ומעלה */}
+      {(showStuck || showInProduction || showRecentActivity) && (
+        <div className="grid grid-cols-1 lg:grid-cols-3 gap-3 mb-3">
+          {/* הזמנות תקועות */}
+          {showStuck && (
+            <div className="card p-4">
+              <div className="flex items-center justify-between mb-2">
+                <div className="text-xs font-bold text-slate-500">הזמנות תקועות</div>
+                <div className="flex items-center gap-1 text-xs text-slate-500">
+                  <span>סף:</span>
+                  {canEditThreshold ? (
+                    <input
+                      type="number"
+                      className="input w-14 py-1 text-xs"
+                      value={stuckDaysInput}
+                      onChange={e => setStuckDaysInput(e.target.value)}
+                      onBlur={saveStuckDays}
+                    />
+                  ) : (
+                    <span className="font-medium">{stuckDays}</span>
+                  )}
+                  <span>ימים</span>
                 </div>
-                <div className="text-xs text-slate-500 mt-1">{prog.label}</div>
-              </Link>
-            )
-          })}
-        </div>
+              </div>
+              {stuckOrders.length === 0 && <p className="text-slate-400 text-sm">אין הזמנות תקועות</p>}
+              {stuckOrders.map(({ order, since }) => (
+                <Link key={order.id} to={`/orders/${order.id}`}
+                      className="flex items-center justify-between py-1.5 text-sm border-b border-slate-100 last:border-0">
+                  <span>#{order.order_number} {order.customer_name_snapshot}</span>
+                  <span className="text-amber-700 text-xs">
+                    {Math.floor((now - new Date(since).getTime()) / 86400000)} ימים ללא שינוי
+                  </span>
+                </Link>
+              ))}
+            </div>
+          )}
 
-        {/* פעילות אחרונה */}
-        <div className="card p-4">
-          <div className="flex items-center justify-between mb-1">
-            <div className="text-xs font-bold text-slate-500">פעילות אחרונה</div>
-            <Link to="/activity" className="text-xs text-brand">כל הפעילות</Link>
-          </div>
-          {activity.length === 0 && <p className="text-slate-400 text-sm">אין פעילות</p>}
-          {activity.map(row => <ActivityRowLine key={`${row.source}-${row.id}`} row={row} />)}
+          {/* בייצור עכשיו */}
+          {showInProduction && (
+            <div className="card p-4">
+              <div className="text-xs font-bold text-slate-500 mb-2">בייצור עכשיו</div>
+              {inProduction.length === 0 && <p className="text-slate-400 text-sm">אין הזמנות בייצור כרגע</p>}
+              {inProduction.map(o => {
+                const prog = calcProgress(o.order_items)
+                return (
+                  <Link key={o.id} to={`/orders/${o.id}`} className="block py-2 border-b border-slate-100 last:border-0">
+                    <div className="flex items-center justify-between text-sm">
+                      <span>#{o.order_number} {o.customer_name_snapshot}</span>
+                      <span className={`text-xs px-2 py-0.5 rounded-full ${ORDER_STATUS_COLORS[o.status] ?? 'bg-slate-100'}`}>
+                        {ORDER_STATUS_LABELS[o.status]}
+                      </span>
+                    </div>
+                    <div className="text-xs text-slate-500 mt-1">{prog.label}</div>
+                  </Link>
+                )
+              })}
+            </div>
+          )}
+
+          {/* פעילות אחרונה */}
+          {showRecentActivity && (
+            <div className="card p-4">
+              <div className="flex items-center justify-between mb-1">
+                <div className="text-xs font-bold text-slate-500">פעילות אחרונה</div>
+                <Link to="/activity" className="text-xs text-brand">כל הפעילות</Link>
+              </div>
+              {activity.length === 0 && <p className="text-slate-400 text-sm">אין פעילות</p>}
+              {activity.map(row => <ActivityRowLine key={`${row.source}-${row.id}`} row={row} />)}
+            </div>
+          )}
         </div>
-      </div>
+      )}
 
       {/* קיצורי דרך */}
-      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
-        <Link to="/orders/new" className="card p-5 hover:shadow-md transition-shadow
-                                          border-2 border-brand">
-          <div className="text-lg font-bold text-brand">+ הזמנה חדשה</div>
-          <div className="text-sm text-slate-500 mt-1">
-            מילוי טופס הזמנה בשטח
-          </div>
-        </Link>
+      {(showNewOrderBtn || showShortcuts) && (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+          {showNewOrderBtn && (
+            <Link to="/orders/new" className="card p-5 hover:shadow-md transition-shadow
+                                              border-2 border-brand">
+              <div className="text-lg font-bold text-brand">+ הזמנה חדשה</div>
+              <div className="text-sm text-slate-500 mt-1">
+                מילוי טופס הזמנה בשטח
+              </div>
+            </Link>
+          )}
 
-        <Link to="/orders" className="card p-5 hover:shadow-md transition-shadow">
-          <div className="text-lg font-bold">הזמנות</div>
-          <div className="text-sm text-slate-500 mt-1">
-            רשימה, סטטוסים, תשלומים ומעקב
-          </div>
-        </Link>
+          {showShortcuts && (
+            <>
+              <Link to="/orders" className="card p-5 hover:shadow-md transition-shadow">
+                <div className="text-lg font-bold">הזמנות</div>
+                <div className="text-sm text-slate-500 mt-1">
+                  רשימה, סטטוסים, תשלומים ומעקב
+                </div>
+              </Link>
 
-        <Link to="/items" className="card p-5 hover:shadow-md transition-shadow">
-          <div className="text-lg font-bold">פריטים</div>
-          <div className="text-sm text-slate-500 mt-1">
-            מעקב ייצור לפי פריט — גזירה, תפירה, מוכן
-          </div>
-        </Link>
+              <Link to="/items" className="card p-5 hover:shadow-md transition-shadow">
+                <div className="text-lg font-bold">פריטים</div>
+                <div className="text-sm text-slate-500 mt-1">
+                  מעקב ייצור לפי פריט — גזירה, תפירה, מוכן
+                </div>
+              </Link>
 
-        <Link to="/fabrics" className="card p-5 hover:shadow-md transition-shadow">
-          <div className="text-lg font-bold">קטלוג בדים</div>
-          <div className="text-sm text-slate-500 mt-1">
-            חיפוש בדים, מחירים ותמונות
-          </div>
-        </Link>
-      </div>
+              <Link to="/fabrics" className="card p-5 hover:shadow-md transition-shadow">
+                <div className="text-lg font-bold">קטלוג בדים</div>
+                <div className="text-sm text-slate-500 mt-1">
+                  חיפוש בדים, מחירים ותמונות
+                </div>
+              </Link>
+            </>
+          )}
+        </div>
+      )}
     </div>
   )
 }
