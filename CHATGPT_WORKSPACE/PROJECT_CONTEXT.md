@@ -98,14 +98,16 @@ Kairi System supports the business workflow around customer orders, fabrics, pro
 
 ## Current branch
 
-`codex/kairi-development`
+`codex/order-page-layout`
 
 ## Known issues
 
-- `docs/HANDOFF.md` says the latest Orders UI changes still require manual browser verification.
+- Order V1 Phase A is implemented but remains uncommitted and requires manual browser verification.
+- Pending credit-card/bank-transfer deposit amounts cannot be persisted safely until Phase B adds payment state.
+- Cash/check custody cannot be tracked until Phase B adds custody fields and office-confirmation support.
 - The overlap between the Orders “advance” and “items” actions still needs a product decision.
 - The Production Board redesign is paused pending new design direction.
 
 ## Current next action
 
-Manually verify the documented Orders flow in the browser, then confirm the intended relationship between the “advance” and “items” actions before changing behavior.
+Manually verify Order V1 Phase A on mobile and desktop, review the uncommitted diff, then plan the approved Phase B payment/custody migration and RPCs.

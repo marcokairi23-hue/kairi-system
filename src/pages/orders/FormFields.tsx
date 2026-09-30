@@ -40,12 +40,16 @@ export function SummaryBox({ label, value, color = 'default' }: SummaryBoxProps)
 interface BlockHeaderProps {
   title: string
   color: string
+  icon?: ReactNode
   action?: ReactNode
 }
-export function BlockHeader({ title, color, action }: BlockHeaderProps) {
+export function BlockHeader({ title, color, icon, action }: BlockHeaderProps) {
   return (
-    <div className={`${color} text-white px-4 py-3 flex items-center justify-between`}>
-      <span className="font-bold text-sm">{title}</span>
+    <div className={`${color} text-white px-4 py-3 flex items-center justify-between gap-3`}>
+      <span className="inline-flex min-w-0 items-center gap-2 text-sm font-bold">
+        {icon && <span className="shrink-0" aria-hidden="true">{icon}</span>}
+        <span>{title}</span>
+      </span>
       {action}
     </div>
   )

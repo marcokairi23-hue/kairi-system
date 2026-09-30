@@ -1,4 +1,7 @@
-import { ShadingItem, SHADING_SUBTYPES, MOUNT_TYPES, MECHANISM_SIDES, ITEM_STATUSES } from './types'
+import {
+  ShadingItem, SHADING_SUBTYPES, MOUNT_TYPES, MECHANISM_SIDES, ITEM_STATUSES,
+  MIN_ITEM_WIDTH_M, MAX_ITEM_WIDTH_M, isValidItemWidth,
+} from './types'
 import { Field } from './FormFields'
 
 interface Props {
@@ -7,10 +10,14 @@ interface Props {
   onChange: (item: ShadingItem) => void
   onRemove: () => void
   subtypes?: string[]
+  creationMode?: boolean
 }
 
-export default function ShadingCard({ item, index, onChange, onRemove, subtypes = SHADING_SUBTYPES }: Props) {
+export default function ShadingCard({
+  item, index, onChange, onRemove, subtypes = SHADING_SUBTYPES, creationMode = false,
+}: Props) {
   const set = (k: keyof ShadingItem, v: unknown) => onChange({ ...item, [k]: v })
+  const widthInvalid = item.width_m !== '' && !isValidItemWidth(item.width_m)
 
   return (
     <div className="border border-orange-200 rounded-lg bg-white overflow-hidden mb-3">
@@ -20,11 +27,13 @@ export default function ShadingCard({ item, index, onChange, onRemove, subtypes 
           {item.location && <span className="text-xs text-orange-600">— {item.location}</span>}
         </div>
         <div className="flex items-center gap-3">
-          <label className="flex items-center gap-1 text-xs text-slate-600">
-            <input type="checkbox" checked={item.for_execution}
-                   onChange={e => set('for_execution', e.target.checked)} />
-            לביצוע
-          </label>
+          {!creationMode && (
+            <label className="flex items-center gap-1 text-xs text-slate-600">
+              <input type="checkbox" checked={item.for_execution}
+                     onChange={e => set('for_execution', e.target.checked)} />
+              לביצוע
+            </label>
+          )}
           <button onClick={onRemove} className="text-red-400 hover:text-red-600 text-lg leading-none">×</button>
         </div>
       </div>
@@ -51,8 +60,13 @@ export default function ShadingCard({ item, index, onChange, onRemove, subtypes 
         </Field>
 
         <Field label="רוחב (מ׳)" required>
-          <input className="input" type="number" min="0" step="0.01" dir="ltr" value={item.width_m}
-                 onChange={e => set('width_m', e.target.value)} />
+          <input
+            className={`input ${widthInvalid ? 'border-red-400 focus:border-red-500 focus:ring-red-200' : ''}`}
+            type="number" min={MIN_ITEM_WIDTH_M} max={MAX_ITEM_WIDTH_M} step="0.01" dir="ltr"
+            value={item.width_m} aria-invalid={widthInvalid}
+            onChange={e => set('width_m', e.target.value)}
+          />
+          {widthInvalid && <div className="mt-1 text-xs text-red-600">הרוחב חייב להיות בין 0.30 ל־10.00 מטר.</div>}
         </Field>
 
         <Field label="גובה (מ׳)" required>
@@ -73,12 +87,14 @@ export default function ShadingCard({ item, index, onChange, onRemove, subtypes 
                  placeholder="לבן, אפור..." />
         </Field>
 
-        <Field label="סטטוס">
-          <select className="input" value={item.item_status}
-                  onChange={e => set('item_status', e.target.value as ShadingItem['item_status'])}>
-            {ITEM_STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-          </select>
-        </Field>
+        {!creationMode && (
+          <Field label="סטטוס">
+            <select className="input" value={item.item_status}
+                    onChange={e => set('item_status', e.target.value as ShadingItem['item_status'])}>
+              {ITEM_STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+            </select>
+          </Field>
+        )}
 
         <Field label="עלות (₪)" required>
           <input className="input font-bold" type="number" min="0" dir="ltr" value={item.price}

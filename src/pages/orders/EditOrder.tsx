@@ -1,5 +1,6 @@
 import { useEffect, useState } from 'react'
 import { useNavigate, useParams } from 'react-router-dom'
+import { Blinds, CreditCard, Package, PanelsTopLeft, PenLine, Plus, Save, UserRound } from 'lucide-react'
 import { useAuth } from '../../lib/auth'
 import { supabase } from '../../lib/supabase'
 import { uid } from '../../lib/uid'
@@ -8,11 +9,12 @@ import {
   OrderForm, emptyForm,
   calcItemsTotal, calcTotalWidth, calcAutoTotal, calcRemaining,
   PAYMENT_METHODS, SEWING_TYPES, SHADING_SUBTYPES, CurtainItem, ShadingItem, OrderAccessory,
-  newCurtainItem, newShadingItem, ITEM_STATUSES,
+  newCurtainItem, newShadingItem, ITEM_STATUSES, hasInvalidItemWidths,
 } from './types'
 import { Field, SummaryBox, BlockHeader } from './FormFields'
 import CurtainCard from './CurtainCard'
 import ShadingCard from './ShadingCard'
+import ItemSelectionDialog from './ItemSelectionDialog'
 import { printOrder, buildFormFromOrder } from './printOrder'
 import SignatureModal from '../../components/SignatureModal'
 import { uploadSignature, getSignatureUrl } from '../../lib/uploadSignature'
@@ -23,6 +25,7 @@ export default function EditOrder() {
   const { profile } = useAuth()
   const [form, setForm] = useState<OrderForm>(emptyForm(profile?.full_name ?? ''))
   const [orderNumber, setOrderNumber] = useState<number | string>('טיוטה')
+  const [customerId, setCustomerId] = useState<string | null>(null)
   const [loading, setLoading] = useState(true)
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -31,6 +34,7 @@ export default function EditOrder() {
   const [existingAgentSignatureUrl, setExistingAgentSignatureUrl] = useState<string | null>(null)
   const [customerSigOpen, setCustomerSigOpen] = useState(false)
   const [agentSigOpen, setAgentSigOpen] = useState(false)
+  const [itemSelectionOpen, setItemSelectionOpen] = useState(false)
   const [originalItemIds, setOriginalItemIds] = useState<string[]>([])
   const sewingTypes = useSettingsList('sewing_types', SEWING_TYPES)
   const paymentMethods = useSettingsList('payment_methods', PAYMENT_METHODS)
@@ -39,13 +43,14 @@ export default function EditOrder() {
   useEffect(() => {
     supabase
       .from('orders')
-      .select('*, profiles!orders_agent_id_fkey(full_name), order_items(*), payments(*)')
+      .select('*, profiles!orders_agent_id_fkey(full_name), customers(city), order_items(*), payments(*)')
       .eq('id', id)
       .single()
       .then(({ data }) => {
         if (!data) return
         setOrderNumber(data.order_number ?? 'טיוטה')
-        setForm(buildFormFromOrder(data))
+        setCustomerId(data.customer_id)
+        setForm({ ...buildFormFromOrder(data), city: data.customers?.city ?? '' })
         setOriginalItemIds((data.order_items ?? []).map((i: { id: string }) => i.id))
         setLoading(false)
         if (data.signature_url) {
@@ -84,9 +89,36 @@ export default function EditOrder() {
   const totalWidth = calcTotalWidth(form)
   const autoTotal = calcAutoTotal(form)
   const remaining = calcRemaining(form)
-  const fillTotal = () => setF('final_total', String(autoTotal))
+  const applyExecutionSelection = (selectedIds: Set<string>) => {
+    const updated: OrderForm = {
+      ...form,
+      curtain_items: form.curtain_items.map(item => ({ ...item, for_execution: selectedIds.has(item.id) })),
+      shading_items: form.shading_items.map(item => ({ ...item, for_execution: selectedIds.has(item.id) })),
+    }
+    updated.final_total = String(calcAutoTotal(updated))
+    setForm(updated)
+  }
+
+  const fillAllItems = () => {
+    applyExecutionSelection(new Set([
+      ...form.curtain_items.map(item => item.id),
+      ...form.shading_items.map(item => item.id),
+    ]))
+  }
 
   const save = async () => {
+    if (!form.city?.trim()) {
+      setError('יש להזין עיר.')
+      return
+    }
+    if (!customerId) {
+      setError('לא ניתן לשמור עיר ללא לקוח מקושר להזמנה.')
+      return
+    }
+    if (hasInvalidItemWidths(form)) {
+      setError('יש להזין רוחב בין 0.30 ל־10.00 מטר לכל פריט.')
+      return
+    }
     setBusy(true); setError(null)
     let signatureUploadFailed = false
     try {
@@ -108,6 +140,14 @@ export default function EditOrder() {
           signatureUploadFailed = true
           setError(e instanceof Error ? e.message : 'שגיאה בהעלאת חתימת הסוכן')
         }
+      }
+
+      if (customerId) {
+        const { error: customerErr } = await supabase
+          .from('customers')
+          .update({ city: form.city.trim() })
+          .eq('id', customerId)
+        if (customerErr) throw customerErr
       }
 
       // עדכון הזמנה
@@ -211,13 +251,18 @@ export default function EditOrder() {
   return (
     <div className="pb-20">
       <div className="flex items-center justify-between mb-4">
-        <h1 className="text-xl font-bold">עריכת הזמנה #{orderNumber}</h1>
+        <div>
+          <h1 className="text-xl font-bold">עריכת הזמנה</h1>
+          <div className="mt-1 text-sm text-slate-500">
+            מספר הזמנה: <span dir="ltr" className="font-semibold text-slate-700">#{orderNumber}</span>
+          </div>
+        </div>
         <button onClick={() => navigate(`/orders/${id}`)} className="btn-ghost text-sm">← חזרה</button>
       </div>
 
       {/* בלוק 1 — פרטי לקוח */}
       <div className="card mb-4 overflow-hidden">
-        <BlockHeader title="👤 פרטי לקוח" color="bg-[#2743C7]" />
+        <BlockHeader title="פרטי לקוח" color="bg-[#2743C7]" icon={<UserRound size={18} />} />
         <div className="p-4 grid grid-cols-2 gap-3">
           <Field label="שם לקוח" required className="col-span-2">
             <input className="input" value={form.customer_name}
@@ -231,22 +276,20 @@ export default function EditOrder() {
             <input className="input" value={form.agent_name}
                    onChange={e => setF('agent_name', e.target.value)} />
           </Field>
-          <Field label="כתובת" className="col-span-2">
+          <Field label="כתובת" className="col-span-2 sm:col-span-1">
             <input className="input" value={form.address}
                    onChange={e => setF('address', e.target.value)} />
+          </Field>
+          <Field label="עיר" required className="col-span-2 sm:col-span-1">
+            <input className="input" value={form.city ?? ''}
+                   onChange={e => setF('city', e.target.value)} />
           </Field>
         </div>
       </div>
 
       {/* בלוק 2 — וילונות */}
       <div className="card mb-4 overflow-hidden">
-        <BlockHeader title="🪟 מידות וילונות" color="bg-[#7C3AED]"
-          action={
-            <button onClick={addCurtain}
-                    className="text-xs bg-white/20 hover:bg-white/30 px-3 py-1 rounded-full text-white">
-              + הוסף וילון
-            </button>
-          } />
+        <BlockHeader title="מידות וילונות" color="bg-[#7C3AED]" icon={<PanelsTopLeft size={18} />} />
         <div className="p-4">
           {form.curtain_items.length === 0
             ? <div className="text-center text-slate-400 text-sm py-4">אין וילונות</div>
@@ -256,18 +299,22 @@ export default function EditOrder() {
                            onRemove={() => removeCurtain(i)}
                            sewingTypes={sewingTypes} />
             ))}
+          <div className="flex justify-center pt-2">
+            <button
+              type="button"
+              onClick={addCurtain}
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#2743C7] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#1F36A8] focus:outline-none focus:ring-2 focus:ring-[#2743C7]/40 focus:ring-offset-2"
+            >
+              <Plus size={16} aria-hidden="true" />
+              הוסף וילון
+            </button>
+          </div>
         </div>
       </div>
 
       {/* בלוק 3 — הצללה */}
       <div className="card mb-4 overflow-hidden">
-        <BlockHeader title="🪞 זברות / ונציאני / רומי / גלילה" color="bg-[#EA8C1F]"
-          action={
-            <button onClick={addShading}
-                    className="text-xs bg-white/20 hover:bg-white/30 px-3 py-1 rounded-full text-white">
-              + הוסף פריט
-            </button>
-          } />
+        <BlockHeader title="זברות / ונציאני / רומי / גלילה" color="bg-[#EA8C1F]" icon={<Blinds size={18} />} />
         <div className="p-4">
           {form.shading_items.length === 0
             ? <div className="text-center text-slate-400 text-sm py-4">אין פריטי הצללה</div>
@@ -277,16 +324,28 @@ export default function EditOrder() {
                            onRemove={() => removeShading(i)}
                            subtypes={shadingSubtypes} />
             ))}
+          <div className="flex justify-center pt-2">
+            <button
+              type="button"
+              onClick={addShading}
+              className="inline-flex items-center justify-center gap-2 rounded-lg bg-[#2743C7] px-4 py-2 text-sm font-semibold text-white transition-colors hover:bg-[#1F36A8] focus:outline-none focus:ring-2 focus:ring-[#2743C7]/40 focus:ring-offset-2"
+            >
+              <Plus size={16} aria-hidden="true" />
+              הוסף פריט
+            </button>
+          </div>
         </div>
       </div>
 
       {/* אביזרים */}
       {form.accessories.length > 0 && (
         <div className="card mb-4 overflow-hidden">
-          <BlockHeader title="🔩 אביזרים" color="bg-slate-600"
+          <BlockHeader title="אביזרים" color="bg-slate-600" icon={<Package size={18} />}
             action={<button onClick={addAccessory}
-                            className="text-xs bg-white/20 hover:bg-white/30 px-3 py-1 rounded-full text-white">
-              + הוסף
+                            type="button"
+                            className="inline-flex items-center gap-1 rounded-full bg-white/20 px-3 py-1 text-xs text-white hover:bg-white/30">
+              <Plus size={14} aria-hidden="true" />
+              הוסף
             </button>} />
           <div className="p-4 space-y-2">
             {form.accessories.map((acc, i) => (
@@ -314,14 +373,15 @@ export default function EditOrder() {
       )}
 
       {!form.accessories.length && (
-        <button onClick={addAccessory} className="btn-ghost text-sm mb-4 w-full">
-          + הוסף אביזר
+        <button type="button" onClick={addAccessory} className="btn-ghost mb-4 inline-flex w-full items-center justify-center gap-2 text-sm">
+          <Plus size={16} aria-hidden="true" />
+          הוסף אביזר
         </button>
       )}
 
       {/* בלוק 4 — תשלום */}
       <div className="card mb-4 overflow-hidden">
-        <BlockHeader title="💳 תשלום וסיכום" color="bg-[#1E9E4C]" />
+        <BlockHeader title="תשלום וסיכום" color="bg-[#1E9E4C]" icon={<CreditCard size={18} />} />
         <div className="p-4 space-y-4">
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             <SummaryBox label="סה״כ פריטים" value={`₪${itemsTotal.toLocaleString()}`} color="purple" />
@@ -342,15 +402,21 @@ export default function EditOrder() {
                      value={form.discount}
                      onChange={e => setF('discount', e.target.value)} />
             </Field>
-            <Field label="סה״כ לתשלום (₪)" required>
-              <div className="flex gap-2">
+            <Field label="סה״כ לתשלום (₪)" required className="col-span-2">
+              <div className="flex flex-col gap-2 sm:flex-row">
                 <input className="input font-bold" type="number" min="0" dir="ltr"
                        value={form.final_total}
                        onChange={e => setF('final_total', e.target.value)} />
-                <button type="button" onClick={fillTotal}
-                        className="shrink-0 px-3 py-2 bg-green-100 hover:bg-green-200 text-green-800 text-xs rounded-lg font-medium">
-                  מלא
-                </button>
+                <div className="grid shrink-0 grid-cols-2 gap-2">
+                  <button type="button" onClick={fillAllItems}
+                          className="px-3 py-2 bg-green-100 hover:bg-green-200 text-green-800 text-xs rounded-lg font-medium">
+                    מלא הכל
+                  </button>
+                  <button type="button" onClick={() => setItemSelectionOpen(true)}
+                          className="px-3 py-2 bg-blue-100 hover:bg-blue-200 text-blue-800 text-xs rounded-lg font-medium">
+                    מלא חלקי
+                  </button>
+                </div>
               </div>
             </Field>
             <Field label="סוג תשלום">
@@ -383,8 +449,9 @@ export default function EditOrder() {
               ) : (
                 <span className="text-sm text-slate-400">אין חתימה</span>
               )}
-              <button type="button" className="btn-ghost text-sm" disabled={busy} onClick={() => setCustomerSigOpen(true)}>
-                ✍️ חתימה
+              <button type="button" className="btn-ghost inline-flex items-center gap-2 text-sm" disabled={busy} onClick={() => setCustomerSigOpen(true)}>
+                <PenLine size={16} aria-hidden="true" />
+                חתימה
               </button>
             </div>
           </Field>
@@ -400,8 +467,9 @@ export default function EditOrder() {
               ) : (
                 <span className="text-sm text-slate-400">אין חתימה</span>
               )}
-              <button type="button" className="btn-ghost text-sm" disabled={busy} onClick={() => setAgentSigOpen(true)}>
-                ✍️ חתימה
+              <button type="button" className="btn-ghost inline-flex items-center gap-2 text-sm" disabled={busy} onClick={() => setAgentSigOpen(true)}>
+                <PenLine size={16} aria-hidden="true" />
+                חתימה
               </button>
             </div>
           </Field>
@@ -420,6 +488,38 @@ export default function EditOrder() {
         onClose={() => setCustomerSigOpen(false)}
       />
 
+      <ItemSelectionDialog
+        open={itemSelectionOpen}
+        items={[
+          ...form.curtain_items.map(item => ({
+            id: item.id,
+            family: item.family,
+            location: item.location,
+            width_m: parseFloat(item.width_m) || 0,
+            fabric_text: item.fabric_text,
+            price: parseFloat(item.price) || 0,
+            for_execution: item.for_execution,
+          })),
+          ...form.shading_items.map(item => ({
+            id: item.id,
+            family: item.family,
+            location: item.location,
+            subtype: item.subtype,
+            width_m: parseFloat(item.width_m) || 0,
+            fabric_text: item.color_fabric_text,
+            price: parseFloat(item.price) || 0,
+            for_execution: item.for_execution,
+          })),
+        ]}
+        orderTotal={parseFloat(form.final_total) || 0}
+        stage="agent"
+        onConfirm={selectedIds => {
+          applyExecutionSelection(selectedIds)
+          setItemSelectionOpen(false)
+        }}
+        onClose={() => setItemSelectionOpen(false)}
+      />
+
       <SignatureModal
         open={agentSigOpen}
         title="חתימת סוכן"
@@ -431,8 +531,9 @@ export default function EditOrder() {
       {error && <div className="text-red-600 text-sm mb-3 card p-3">{error}</div>}
 
       <div className="flex gap-2">
-        <button className="btn-primary flex-1 py-3" disabled={busy} onClick={save}>
-          {busy ? 'שומר...' : '💾 שמור שינויים'}
+        <button className="btn-primary inline-flex flex-1 items-center justify-center gap-2 py-3" disabled={busy} onClick={save}>
+          {!busy && <Save size={18} aria-hidden="true" />}
+          {busy ? 'שומר...' : 'שמור שינויים'}
         </button>
         <button className="btn-ghost" onClick={() => navigate(`/orders/${id}`)}>
           ביטול

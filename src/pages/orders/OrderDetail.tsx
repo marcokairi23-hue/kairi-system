@@ -779,6 +779,8 @@ export default function OrderDetail() {
         open={officeSelectionOpen}
         items={(order.order_items ?? []).map(i => ({
           id: i.id, family: i.family, location: i.location, subtype: i.subtype,
+          width_m: i.width_m,
+          fabric_text: i.family === 'curtain' ? i.fabric_text : i.color_fabric_text,
           price: i.price, for_execution: i.for_execution,
         }))}
         orderTotal={order.final_total}
