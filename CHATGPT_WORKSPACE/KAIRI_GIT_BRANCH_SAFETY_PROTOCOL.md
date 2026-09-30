@@ -1,80 +1,88 @@
-# Kairi Git Branch Safety Protocol
+# Kairi Git Safety Protocol
 
-## Previous branch incident
+## Authoritative normal workflow: MAIN-ONLY
 
-The temporary `codex/project-context` branch entered a confusing state: local `main` was behind `origin/main`, the local and remote temporary branch histories had diverged, and an empty `.git/rebase-merge` directory made Git report an active rebase. Recovery required preserving `main`, removing only verified-stale rebase metadata, deleting the temporary branch locally and remotely, and then explicitly aligning local `main` with `origin/main`.
+By explicit human decision on 2026-09-30, approved KAIRI SYSTEM Sprint work is performed directly on `main`. No Sprint branch is created unless the human explicitly requests a different Git strategy.
 
-## Root cause
+Normal Sprint lifecycle:
 
-Branch and rebase activity occurred without completing a clean fetch-and-verify preflight. This allowed local and remote references to represent different starting histories. Stale rebase metadata then obscured the real repository state.
+`FETCH → VERIFY MAIN → WORK → TEST → DIFF → CHECKLIST → COMMIT → PUSH → SUPERVISOR REVIEW → NEXT SPRINT`
 
-## Mandatory preflight: FETCH → VERIFY → BRANCH
+1. **FETCH** — Update remote references with `git fetch origin`.
+2. **VERIFY MAIN** — Confirm branch, commit identity, working-tree state, and absence of an active Git operation.
+3. **WORK** — Make only the approved Sprint-scoped changes.
+4. **TEST** — Run every check required by the Sprint and record the result.
+5. **DIFF** — Review all changed and untracked files for scope, secrets, and accidental edits.
+6. **CHECKLIST** — Complete every Sprint checkbox and update `CHATGPT_WORKSPACE`.
+7. **COMMIT** — Create one clear Sprint checkpoint commit only after all required checks pass.
+8. **PUSH** — Push `main` to `origin/main` without force so GitHub and the supervisor remain synchronized.
+9. **SUPERVISOR REVIEW** — Report the checkpoint commit, validation evidence, risks, and open decisions.
+10. **NEXT SPRINT** — Do not begin until directed by the human.
 
-Before creating any development branch:
+## Mandatory preflight before every Sprint
 
-1. Run `git status` and `git branch --show-current`.
-2. Confirm the current branch is `main` and the working tree is clean.
-3. Run `git fetch origin`.
-4. Record `git rev-parse HEAD` and `git rev-parse origin/main`.
-5. Confirm local `main` exactly matches `origin/main`.
-6. Check `git branch -a` and confirm the proposed branch name does not already exist.
-7. Check that no merge or rebase is active.
-8. Stop without repair if any condition fails; report the exact failure and request approval for recovery.
+Run and verify, in order:
 
-## Branch creation rules
+1. `git status`
+2. `git branch --show-current`; the normal target is `main`.
+3. `git fetch origin`.
+4. Record `git rev-parse HEAD`.
+5. Record `git rev-parse origin/main`.
+6. Confirm `HEAD == origin/main`.
+7. Confirm no merge is active.
+8. Confirm no rebase is active.
+9. Confirm the working tree has the expected state, normally clean at Sprint start.
 
-- Never develop directly on `main`.
-- Create a new branch only after the mandatory preflight passes.
-- Create the branch directly from the verified `origin/main` commit.
-- Prefer `git switch --no-track -c <branch-name> origin/main` for a new local branch.
-- Verify the new branch HEAD equals `origin/main` before editing files.
-- Do not reuse, overwrite, force-update, or delete an existing branch without explicit approval.
-- Do not push a new branch until its changes, tests, and diff have been reviewed and push approval is given.
+If the current branch is not `main`, switch only when the working tree is clean and there is no unique unmerged work. Otherwise stop and report the exact state. If local `main` and `origin/main` differ or diverge unexpectedly, stop; do not repair automatically.
 
-## Codex and agent Git safety rules
+## Rules during a Sprint
 
-- Read this protocol and `PROJECT_CONTEXT.md` before Git operations.
-- Report the current branch, working-tree state, and relevant commit IDs before risky Git actions.
-- Do not commit, push, merge, rebase, reset, force-push, or delete branches without explicit approval.
-- Do not pull as a substitute for understanding divergence.
-- Do not modify `main` history or move `main` unless the exact action is explicitly approved.
-- Do not combine recovery with unrelated cleanup or code changes.
+- Work directly on `main` unless the human explicitly requests another strategy.
+- Keep changes inside the approved Sprint scope; do not combine unrelated cleanup.
 - Preserve unrelated tracked and untracked files.
-- Stop when local and remote history unexpectedly diverge.
-- After every approved Git action, verify the branch, status, refs, and resulting history.
+- Do not pull, merge, rebase, reset, or rewrite history to make a warning disappear.
+- Do not use force operations.
+- Recheck status and operation metadata if repository state changes unexpectedly.
+
+## Checkpoint commit and push gate
+
+A Sprint may be committed and pushed only when:
+
+- every Sprint checkbox is complete;
+- all required tests and builds pass;
+- the complete diff and changed-file list have been reviewed;
+- only intended Sprint files changed; and
+- `CHATGPT_WORKSPACE` records the final verified state.
+
+Each completed Sprint ends with one clear checkpoint commit. After verifying that commit, push `main` to `origin/main`, then refresh the remote ref and verify local `HEAD == origin/main`.
+
+Never:
+
+- force-push;
+- run `git reset --hard` as routine recovery;
+- rebase `main`;
+- rewrite `main` history;
+- silently repair divergence; or
+- commit or push an incomplete Sprint.
+
+## Exceptional branch or recovery work
+
+Branches are exceptional, not the normal Sprint workflow. Create, reuse, delete, or publish a branch only when the human explicitly requests that exact strategy.
+
+The previous `codex/project-context` incident remains the recovery lesson: local and remote histories differed and stale `.git/rebase-merge` metadata obscured the repository state. For recovery work:
+
+- Stop all writes and record `HEAD`, `main`, `origin/main`, relevant branch refs, status, and operation metadata.
+- Preserve unique commits and all uncommitted work.
+- Never merge, rebase, pull, reset, force-push, delete a branch, or remove operation metadata without explicit approval for the exact action.
+- Remove merge/rebase metadata only after proving it is stale.
+- Keep recovery separate from application or documentation changes.
+- Verify branch, status, refs, and history after every approved action.
 
 ## `.claude/` local-only handling
 
 - Keep `.claude/` local and untracked.
-- Exclude it through `.git/info/exclude`; do not modify repository `.gitignore` solely for this machine-local configuration.
+- Exclude it through `.git/info/exclude`; do not modify repository `.gitignore` solely for local machine configuration.
 - Never stage or commit `.claude/settings.local.json`.
-- Treat its tool permissions, absolute paths, tokens, webhook URLs, and other account data as sensitive.
+- Treat tool permissions, absolute paths, tokens, webhook URLs, and account data as sensitive.
 - If a credential is exposed, revoke or rotate it and remove the sensitive value from local configuration.
 - Do not delete or edit `.claude/` during unrelated Git cleanup.
-
-## Recovery rules
-
-- Stop all writes and inspect `git status`, the current branch, recent history, refs, and operation metadata.
-- Record the commit IDs of `HEAD`, `main`, `origin/main`, and affected branches before recovery.
-- Never merge, rebase, pull, reset, or force-push merely to make warnings disappear.
-- Never reset `main` without explicit approval and a verified target commit.
-- Remove rebase or merge metadata only when it is proven stale and the exact metadata removal is approved.
-- Delete local or remote branches only when the exact branch is identified and deletion is approved.
-- Never delete unrelated untracked files as part of recovery.
-- Verify after recovery that `main` is preserved or explicitly aligned as approved, the working tree has the expected state, and no unintended refs changed.
-
-## Standard workflow
-
-`FETCH → VERIFY → BRANCH → WORK → TEST → DIFF → COMMIT → PUSH → REVIEW → PR → MERGE`
-
-1. **FETCH** — Update remote references with `git fetch origin`.
-2. **VERIFY** — Confirm branch, clean status, matching base commits, and no active Git operation.
-3. **BRANCH** — Create a uniquely named development branch from `origin/main`.
-4. **WORK** — Make only approved, scoped changes.
-5. **TEST** — Run relevant checks and record results.
-6. **DIFF** — Review all changed and untracked files for scope, secrets, and accidental edits.
-7. **COMMIT** — Commit only after approval.
-8. **PUSH** — Push only after approval; never force-push unless separately and explicitly approved.
-9. **REVIEW** — Review the pushed diff and test evidence.
-10. **PR** — Open a pull request with scope, risks, and verification notes.
-11. **MERGE** — Merge only after approval and required checks; verify `main` afterward.

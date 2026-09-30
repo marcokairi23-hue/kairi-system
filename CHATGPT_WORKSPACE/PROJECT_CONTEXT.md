@@ -2,27 +2,35 @@
 
 ## Project purpose
 
-Kairi System supports the business workflow around customer orders, fabrics, production items, payments and activity, users, and feature-controlled screens.
+KAIRI SYSTEM supports customer orders, item-level production and supplier routing, payments, installation, documents, activity, users, and feature-controlled screens.
+
+The V1 objective is a stable end-to-end replica of the current operational workflow with minor improvements and minimum new complexity. `WORKFLOW_V1.md` is the authoritative workflow contract.
 
 ## Tech stack
 
 - React 18, TypeScript, and Vite
 - Tailwind CSS
-- Supabase authentication, database, storage, RLS, and edge functions
+- Supabase authentication, PostgreSQL, storage, RLS, and Edge Functions
 - React Router
 - `pdf-lib` and `html2canvas` for PDF workflows
 - Cloudflare Pages deployment documented in `README.md`
 
 ## Main modules
 
-- Authentication and role-aware routing
+- Authentication, profiles, and role-aware feature routing
 - Dashboard and feature flags
 - Orders, order items, payments, and status progression
+- Production board and item work lists
 - Fabrics
-- Production/items
-- Activity log
+- Activity/history
 - Users and settings
 - PDF generation, storage, printing, sharing, and signatures
+
+## Authoritative V1 workflow
+
+`NEW ORDER → PAYMENT GATE → ITEM ROUTING → CUTTER / OFFICE → PRODUCTION → GOODS RECEIPT → READY → PICKUP / INSTALLATION → SIGNATURES → OFFICE/ADMIN CLOSURE`
+
+The contract requires separate payment, order, item, owner, permission, timestamp, and immutable event dimensions. See `WORKFLOW_V1.md` for states, transitions, permissions, exclusions, evidence, and open decisions.
 
 ## Project chat hierarchy
 
@@ -33,81 +41,68 @@ Kairi System supports the business workflow around customer orders, fabrics, pro
 
 ### 01_ORDERS
 
-- Order creation
-- Order editing
-- Order items
-- Accessories
-- Payments
-- Order and item status flows
+- Order creation and editing
+- Order items and accessories
+- Payment gate and payment routes
+- Order/item workflow and closure
 
 ### 02_DATABASE
 
-- Supabase schema
-- Migrations
-- RPCs
-- Transactions
-- Data integrity
+- Supabase schema and migrations
+- RPCs, transactions, and data integrity
+- RLS and append-only audit enforcement
 
 ### 03_AUTH_RLS
 
-- Authentication
-- Profiles
-- Roles
-- RLS
-- Feature flags
-- Permissions
+- Authentication, profiles, roles, and permissions
+- Feature flags and screen access
 
 ### 04_PDF
 
-- PDF generation
-- Storage
-- Document consistency
+- PDF generation and storage
+- Work instructions, receipts, reports, and installation print batches
 - Sharing, email, and WhatsApp
 
 ### 05_UI
 
-- Layout
-- RTL
-- Forms
-- Responsive behavior
-- Usability
+- Layout, RTL, forms, responsive behavior, and usability
+- Workflow dialogs and prominent activity milestones
 
 ## Important files
 
-- `src/App.tsx` — application routes and feature gates
+- `CHATGPT_WORKSPACE/WORKFLOW_V1.md` — authoritative V1 operational contract
+- `src/App.tsx` — routes and feature gates
 - `src/lib/auth.tsx` — authentication context
-- `src/lib/supabase.ts` — Supabase client
-- `src/lib/featureFlags.tsx` — feature evaluation and administration
-- `src/pages/orders/` — order workflows
-- `src/pages/items/` — item and production workflows
-- `src/lib/generateOrderPdf.ts` — PDF generation
-- `supabase/migrations/` — database migrations
-- `docs/HANDOFF.md`, `docs/SPEC.md`, `docs/BUSINESS.md`, `docs/DEFECTS_MAP.md` — project source documents
+- `src/lib/statusHelpers.ts` — current frontend status/routing helpers
+- `src/pages/orders/` — current order/payment/installation flows
+- `src/pages/items/` — current item and production flows
+- `src/pages/activity/ActivityLog.tsx` — current merged status/payment activity view
+- `supabase/migrations/` — committed database migration evidence
+- `docs/HANDOFF.md`, `docs/SPEC.md`, `docs/BUSINESS.md`, and `docs/DEFECTS_MAP.md` — historical/product source documents
 
-## Reusable knowledge
+## Git workflow
 
-- Reusable patterns are staged under `CHATGPT_WORKSPACE/PLAYBOOK/`.
-- `PLAYBOOK_CREATOR` is responsible for identifying reusable candidates.
+- Normal approved Sprint work is MAIN-ONLY and occurs directly on `main`.
+- No Sprint branch is created unless the human explicitly requests another strategy.
+- Every Sprint follows `FETCH → VERIFY MAIN → WORK → TEST → DIFF → CHECKLIST → COMMIT → PUSH → SUPERVISOR REVIEW`.
+- Historical `codex/kairi-development` and `codex/order-page-layout` refs may still exist, but they are not the active development location and must not be presented as current state.
 
-## Workspace layers
+## Verified repository baseline
+
+- Sprint 0 started from clean `main` at `5b105e7bb60cd56928b5a650591f990182208611`, matching `origin/main` after fetch.
+- The order-page V1 UX commit is already merged to `main`.
+- Current code partially supports item routing, production tracks, activity, installer assignment, and two installation signatures.
+- Major workflow gaps are documented in `WORKFLOW_V1.md`; Sprint 0 intentionally does not implement them.
+- The committed migration chain does not fully declare every production column/status currently referenced by code, so migration reconciliation is required before schema implementation.
+
+## Reusable knowledge and workspace layers
 
 - `PLAYBOOK_LIBRARY` → reusable cross-project knowledge
-- `CHATGPT_WORKSPACE` → Kairi System-specific context and state
+- `CHATGPT_WORKSPACE` → KAIRI SYSTEM-specific context and state
 - `CONTROL_TOWER` → coordination and routing
-- Domain chats → execution by area
-
-## Current branch
-
-`codex/order-page-layout`
-
-## Known issues
-
-- Order V1 Phase A is implemented but remains uncommitted and requires manual browser verification.
-- Pending credit-card/bank-transfer deposit amounts cannot be persisted safely until Phase B adds payment state.
-- Cash/check custody cannot be tracked until Phase B adds custody fields and office-confirmation support.
-- The overlap between the Orders “advance” and “items” actions still needs a product decision.
-- The Production Board redesign is paused pending new design direction.
+- `CHATS/` → domain execution context
+- Promote reusable patterns to `PLAYBOOK_LIBRARY` only after review and explicit approval.
 
 ## Current next action
 
-Manually verify Order V1 Phase A on mobile and desktop, review the uncommitted diff, then plan the approved Phase B payment/custody migration and RPCs.
+Supervisor review of the Sprint 0 workflow contract and open decisions. Do not begin Sprint 1 until directed by the human.

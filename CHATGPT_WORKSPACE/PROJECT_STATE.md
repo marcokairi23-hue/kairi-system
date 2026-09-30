@@ -2,49 +2,62 @@
 
 ## Purpose
 
-This file records verified, current Kairi System project state. Update it only from repository evidence or explicit project decisions.
+This file records verified current KAIRI SYSTEM state. Update it only from repository evidence or explicit project decisions.
 
 ## Current state
 
-- Project workspace: `CHATGPT_WORKSPACE/`
-- Development branch: `codex/order-page-layout`
-- Current phase: Order V1 Phase A implemented, uncommitted, awaiting human UI review.
-- Task queue: `TASKS.md`
-- Decision record: `DECISIONS.md`
-- Coordination and routing: `CONTROL_TOWER.md`
-- Domain execution context: `CHATS/`
+- Active development branch: `main`
+- Normal Sprint strategy: MAIN-ONLY
+- Sprint 0 baseline: `5b105e7bb60cd56928b5a650591f990182208611`, verified equal to `origin/main` before work
+- Current phase: Sprint 0 workflow contract and project baseline established; next step is Supervisor review
+- Authoritative workflow: `CHATGPT_WORKSPACE/WORKFLOW_V1.md`
+- Task queue/checklist: `CHATGPT_WORKSPACE/TASKS.md`
+- Decision record: `CHATGPT_WORKSPACE/DECISIONS.md`
+- Coordination: `CHATGPT_WORKSPACE/CONTROL_TOWER.md`
 
-## Phase A implemented
+Historical branches `codex/kairi-development` and `codex/order-page-layout` remain as refs but are not the current work location. The order-page work from `codex/order-page-layout` is already merged into `main`.
 
-- Order-number display, centered add-item controls, width validation, split toggle, required city, and simplified new-order actions.
-- Full/partial execution controls with selected count, width, fabric, and price summaries.
-- Semi-automatic, manually editable `final_total`.
-- Stable frontend payment-route codes; Bit removed from new-order choices.
-- Cash/check route selected items through internal `ready`; quote items are saved as non-execution; other routes remain `pending_payment`.
-- Duplicate submission-time item selection removed; build passes.
+## Current implemented baseline
 
-## Pending and blockers
+- Order creation/editing includes order number display, item controls, width validation, city, full/partial execution selection, live summaries, and semi-automatic editable `final_total`.
+- Frontend payment-route codes exist. Cash/check currently enter the order into the active flow, credit card/bank transfer wait in `pending_payment`, and quotes save items outside execution.
+- Item-level internal/external routing exists: new curtain items are internal and shading items external.
+- Item and production screens provide order grouping, subset selection, printing, bulk progression, worker assignment, and history inserts.
+- Current internal item track is `new → cut → sewing → ready`; current external track is `new → ordered_from_supplier → arrived → ready`.
+- Activity combines order/item history with payment records.
+- Installer name and two installation signature URL fields exist; order completion is suggested after both signatures.
+- Sprint 0 validation: `npm run build` passes; Vite reports the existing large-bundle advisory (main JS chunk exceeds 500 kB after minification).
 
-- Manual mobile, desktop, and RTL browser verification is pending.
-- Phase B payment/custody persistence is blocked on an approved migration and RPC implementation.
-- Pending card/transfer deposit requests are not persisted in Phase A because the current schema would misclassify them as received.
+## Verified contract gaps
 
-## Current risks
+- No explicit payment approval/custody state.
+- No Cutter or Installer database roles; current roles are Admin, Office, Sales, and Viewer.
+- No Roman own-fabric routing input.
+- No pending-cut lock, cut-instruction entity, or actual-meters confirmation.
+- No required supplier confirmation action tied to an item.
+- No Goods Receipt entity or confirmation flow.
+- Order readiness is suggested rather than automatic and authoritative.
+- No pickup Track Cutting Report.
+- No multi-order Installer print/accept action with page-per-order output.
+- No installation photo upload.
+- Final closure is not fully restricted to Office/Admin.
+- Existing state and history writes are separate client operations rather than one atomic boundary.
+- Current history does not satisfy the full structured immutable event contract.
+- Committed migrations do not fully reconstruct the production-route/status schema currently referenced by application code.
 
-- Existing payment rows have no payment-status or custody distinction.
-- Historical cash/check custody cannot be inferred safely.
-- The current client-side save sequence is not transactional.
+## Risks
+
+- Existing payment rows cannot distinguish requested, confirmed, rejected, or custody states.
+- Historical payment custody cannot be inferred safely.
+- Current client-side multi-write flows can partially succeed.
+- Role/UI/RLS behavior does not yet match the V1 permission matrix.
+- Designing new migrations before reconciling missing schema history could break clean deployments or live data.
+- Pickup closure remains a product decision and must not be guessed during implementation.
 
 ## Next action
 
-Complete human review of Phase A, then implement and validate the Phase B migration, RLS, balance filtering, and transactional RPCs.
-
-## Phase B dependencies
-
-- `payment_status`, `custody_status`, `recorded_by`, `office_received_by`, and `office_received_at` on payments.
-- Nullable `paid_at`, conservative historical backfill, payment ownership RLS, and office-only custody confirmation.
-- Transactional submission/finalization and office-receipt RPCs.
+Supervisor review of Sprint 0, including the open decisions in `WORKFLOW_V1.md`. Do not begin Sprint 1 or create a migration until the human chooses the next approved scope.
 
 ## Maintenance
 
-Review this file when branch, task, blocker, or project status changes. Follow `WORK_RULES.md` and `KAIRI_GIT_BRANCH_SAFETY_PROTOCOL.md` before taking action.
+Follow `WORK_RULES.md` and `KAIRI_GIT_BRANCH_SAFETY_PROTOCOL.md`. Future state claims must be checked against `main`, application code, committed migrations, and approved product decisions.
