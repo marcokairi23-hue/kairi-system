@@ -24,6 +24,54 @@ Kairi System supports the business workflow around customer orders, fabrics, pro
 - Users and settings
 - PDF generation, storage, printing, sharing, and signatures
 
+## Project chat hierarchy
+
+### CONTROL_TOWER
+
+- Owns coordination, priorities, approvals, task routing, and project status.
+- Does not directly own implementation code.
+
+### 01_ORDERS
+
+- Order creation
+- Order editing
+- Order items
+- Accessories
+- Payments
+- Order and item status flows
+
+### 02_DATABASE
+
+- Supabase schema
+- Migrations
+- RPCs
+- Transactions
+- Data integrity
+
+### 03_AUTH_RLS
+
+- Authentication
+- Profiles
+- Roles
+- RLS
+- Feature flags
+- Permissions
+
+### 04_PDF
+
+- PDF generation
+- Storage
+- Document consistency
+- Sharing, email, and WhatsApp
+
+### 05_UI
+
+- Layout
+- RTL
+- Forms
+- Responsive behavior
+- Usability
+
 ## Important files
 
 - `src/App.tsx` — application routes and feature gates
@@ -35,6 +83,18 @@ Kairi System supports the business workflow around customer orders, fabrics, pro
 - `src/lib/generateOrderPdf.ts` — PDF generation
 - `supabase/migrations/` — database migrations
 - `docs/HANDOFF.md`, `docs/SPEC.md`, `docs/BUSINESS.md`, `docs/DEFECTS_MAP.md` — project source documents
+
+## Reusable knowledge
+
+- Reusable patterns are staged under `CHATGPT_WORKSPACE/PLAYBOOK/`.
+- `PLAYBOOK_CREATOR` is responsible for identifying reusable candidates.
+
+## Workspace layers
+
+- `PLAYBOOK_LIBRARY` → reusable cross-project knowledge
+- `CHATGPT_WORKSPACE` → Kairi System-specific context and state
+- `CONTROL_TOWER` → coordination and routing
+- Domain chats → execution by area
 
 ## Current branch
 

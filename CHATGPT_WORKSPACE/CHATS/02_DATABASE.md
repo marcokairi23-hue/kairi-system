@@ -2,7 +2,15 @@
 
 ## Scope
 
-Supabase schema, migrations, storage, database functions, and data integrity.
+- Supabase schema
+- Migrations
+- RPCs
+- Transactions
+- Data integrity
+
+## Startup
+
+Before starting work, read `../PROJECT_CONTEXT.md`, `../WORK_RULES.md`, `../KAIRI_GIT_BRANCH_SAFETY_PROTOCOL.md`, and this file.
 
 ## Current context
 

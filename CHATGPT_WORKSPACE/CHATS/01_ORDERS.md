@@ -2,7 +2,16 @@
 
 ## Scope
 
-Order creation, editing, detail views, payments, item selection, status progression, printing, and sharing.
+- Order creation
+- Order editing
+- Order items
+- Accessories
+- Payments
+- Order and item status flows
+
+## Startup
+
+Before starting work, read `../PROJECT_CONTEXT.md`, `../WORK_RULES.md`, `../KAIRI_GIT_BRANCH_SAFETY_PROTOCOL.md`, and this file.
 
 ## Current context
 

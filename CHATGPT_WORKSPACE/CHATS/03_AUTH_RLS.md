@@ -2,7 +2,16 @@
 
 ## Scope
 
-Authentication, user roles, route access, row-level security, and permission alignment.
+- Authentication
+- Profiles
+- Roles
+- RLS
+- Feature flags
+- Permissions
+
+## Startup
+
+Before starting work, read `../PROJECT_CONTEXT.md`, `../WORK_RULES.md`, `../KAIRI_GIT_BRANCH_SAFETY_PROTOCOL.md`, and this file.
 
 ## Current context
 

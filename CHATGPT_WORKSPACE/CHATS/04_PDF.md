@@ -2,7 +2,14 @@
 
 ## Scope
 
-Order PDF generation, work-order printing, storage uploads, sharing, and signatures.
+- PDF generation
+- Storage
+- Document consistency
+- Sharing, email, and WhatsApp
+
+## Startup
+
+Before starting work, read `../PROJECT_CONTEXT.md`, `../WORK_RULES.md`, `../KAIRI_GIT_BRANCH_SAFETY_PROTOCOL.md`, and this file.
 
 ## Current context
 
