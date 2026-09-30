@@ -123,3 +123,25 @@ RISKS:
 Legacy status consumers remain until the approved migration and follow-up UI integration.
 NEXT:
 Supervisor migration review; do not apply, commit, push, or continue Sprint 2.
+
+## SPRINT 2 — MIGRATION REVIEW
+
+STATUS:
+0016 pushed for review at `06d2d9e`; not applied. Sprint 2 continuation approved.
+CHECKBOXES:
+Roman subtype and legacy backfill reviewed statically; correction remains open.
+FILES:
+`0016_initial_item_routing_v1.sql`, `0011_shading_subtype_text.sql`, current order form and workspace reports.
+TESTS:
+Static code/schema review only; no migration execution or runtime tests.
+RESULT:
+`רומי` is stored, but 0016 checks `roman`; prior in-progress items may be labeled as awaiting work.
+DECISIONS:
+Revise 0016 and review data compatibility before application approval.
+User-journey tests run after all Sprint code/migration changes.
+BLOCKERS:
+Separate approval required to apply corrected 0016.
+RISKS:
+Current 0016 must not be applied as reviewed.
+NEXT:
+Correct SQL and UI on `main`; perform technical checks before the migration gate.
