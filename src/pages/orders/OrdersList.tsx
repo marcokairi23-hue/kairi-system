@@ -13,6 +13,7 @@ import { ActionOrder } from './OrderActions'
 import {
   ORDER_STATUS_NEXT, ORDER_TO_ITEM_STATUS, suggestOrderStatus, fmt,
 } from '../../lib/statusHelpers'
+import { sumReceivedPayments } from '../../lib/payments'
 
 type Order = ActionOrder & { created_at: string }
 type SortKey = 'order_number' | 'customer' | 'created_at' | 'total' | 'status'
@@ -39,7 +40,7 @@ const VIEW_KEY = 'kairi_orders_view'
 
 const hasOpenBalance = (o: ActionOrder) => {
   if (o.status === 'completed' || o.status === 'cancelled') return false
-  const paid = (o.payments ?? []).reduce((s, p) => s + p.amount, 0)
+  const paid = sumReceivedPayments(o.payments ?? [])
   return o.final_total - paid > 0
 }
 
@@ -121,6 +122,7 @@ export default function OrdersList() {
 
   // ---------- קידום סטטוס הזמנה ----------
   const handleAdvance = (order: ActionOrder) => {
+    if (order.status === 'pending_payment') return
     const next = ORDER_STATUS_NEXT[order.status]
     if (!next) return
 
@@ -231,8 +233,7 @@ export default function OrdersList() {
     await load()
   }
 
-  const paidOf = (o: ActionOrder) =>
-    (o.payments ?? []).reduce((s, p) => s + p.amount, 0)
+  const paidOf = (o: ActionOrder) => sumReceivedPayments(o.payments ?? [])
 
   const paymentStatusOf = (o: ActionOrder): 'paid' | 'partial' | 'unpaid' => {
     const paid = paidOf(o)

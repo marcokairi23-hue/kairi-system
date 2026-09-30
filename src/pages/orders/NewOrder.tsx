@@ -90,7 +90,11 @@ export default function NewOrder() {
   const choosePaymentRoute = (route: PaymentRoute | '') => {
     setPaymentRoute(route)
     const label = PAYMENT_ROUTE_OPTIONS.find(option => option.value === route)?.label ?? ''
-    setF('payment_method', route === 'quote' || route === 'pay_later' ? '' : label)
+    setForm(current => ({
+      ...current,
+      payment_method: route === 'quote' ? '' : label,
+      paid_on_account: route === 'quote' ? '' : current.paid_on_account,
+    }))
   }
 
   const validateOrderForm = (candidate: OrderForm): string | null => {
@@ -110,12 +114,12 @@ export default function NewOrder() {
       return
     }
     const deposit = parseFloat(form.paid_on_account) || 0
-    if ((paymentRoute === 'cash' || paymentRoute === 'check') && deposit <= 0) {
-      setError('יש להזין מקדמה גדולה מאפס עבור מזומן או צ׳ק.')
+    if (paymentRoute !== 'quote' && deposit <= 0) {
+      setError('יש להזין סכום מקדמה גדול מאפס.')
       return
     }
     if (
-      (paymentRoute === 'cash' || paymentRoute === 'check') &&
+      paymentRoute !== 'quote' &&
       ![...form.curtain_items, ...form.shading_items].some(item => item.for_execution)
     ) {
       setError('יש לבחור לפחות פריט אחד לביצוע.')
@@ -134,14 +138,13 @@ export default function NewOrder() {
   const save = async (route: PaymentRoute) => {
     const isQuote = route === 'quote'
     const entersExecution = route === 'cash' || route === 'check'
-    const paymentSafeForm: OrderForm = entersExecution
-      ? form
-      : { ...form, paid_on_account: '', payment_method: '' }
     const f: OrderForm = isQuote ? {
-      ...paymentSafeForm,
-      curtain_items: paymentSafeForm.curtain_items.map(item => ({ ...item, for_execution: false })),
-      shading_items: paymentSafeForm.shading_items.map(item => ({ ...item, for_execution: false })),
-    } : paymentSafeForm
+      ...form,
+      paid_on_account: '',
+      payment_method: '',
+      curtain_items: form.curtain_items.map(item => ({ ...item, for_execution: false })),
+      shading_items: form.shading_items.map(item => ({ ...item, for_execution: false })),
+    } : form
     const validationError = validateOrderForm(f)
     if (validationError) {
       setError(validationError)
@@ -254,7 +257,8 @@ export default function NewOrder() {
 
       // הפקת PDF והעלאה ל-Storage (לא חוסמת את שמירת ההזמנה בכישלון)
       try {
-        const pdfBlob = await generateOrderPdf(f, allocatedNumber ?? 'טיוטה', true)
+        const documentForm = entersExecution ? f : { ...f, paid_on_account: '', payment_method: '' }
+        const pdfBlob = await generateOrderPdf(documentForm, allocatedNumber ?? 'טיוטה', true)
         const pdfUrl = await uploadOrderPdf(order.id, pdfBlob)
         const pdfUrlOriginal = await uploadOrderPdf(order.id, pdfBlob, true)
         await supabase.from('orders').update({ pdf_url: pdfUrl, pdf_url_original: pdfUrlOriginal }).eq('id', order.id)
@@ -263,12 +267,16 @@ export default function NewOrder() {
       }
 
       // תשלום ראשוני
-      if (entersExecution && f.paid_on_account && parseFloat(f.paid_on_account) > 0) {
+      if (!isQuote && f.paid_on_account && parseFloat(f.paid_on_account) > 0) {
         const { error: paymentError } = await supabase.from('payments').insert({
           order_id: order.id,
           amount: parseFloat(f.paid_on_account),
           method: f.payment_method || null,
-          received_by: profile!.id,
+          payment_route: route,
+          payment_status: entersExecution ? 'received' : 'pending',
+          recorded_by: profile!.id,
+          received_by: entersExecution ? profile!.id : null,
+          paid_at: null,
         })
         if (paymentError) throw paymentError
       }
@@ -480,11 +488,15 @@ export default function NewOrder() {
                 </div>
               </div>
             </Field>
-            <Field label="מקדמה לתשלום (₪)">
+            {paymentRoute !== 'quote' && <Field label={
+              paymentRoute === 'credit_card' || paymentRoute === 'bank_transfer'
+                ? 'מקדמה מבוקשת לאישור המשרד (₪)'
+                : 'מקדמה שהתקבלה (₪)'
+            } required>
               <input className="input" type="number" min="0" dir="ltr"
                      value={form.paid_on_account}
                      onChange={e => setF('paid_on_account', e.target.value)} />
-            </Field>
+            </Field>}
             <Field label="מסלול תשלום" required>
               <select className="input" value={paymentRoute}
                       onChange={e => choosePaymentRoute(e.target.value as PaymentRoute | '')}>
@@ -597,7 +609,11 @@ export default function NewOrder() {
             </p>
             <div className="mb-5 space-y-2 rounded-xl bg-slate-50 px-4 py-3 text-sm">
               <div className="flex items-center justify-between gap-4">
-                <span className="text-slate-600">מקדמה לתשלום:</span>
+                <span className="text-slate-600">
+                  {paymentRoute === 'credit_card' || paymentRoute === 'bank_transfer'
+                    ? 'מקדמה מבוקשת:'
+                    : paymentRoute === 'quote' ? 'מקדמה:' : 'מקדמה שהתקבלה:'}
+                </span>
                 <strong dir="ltr" className="text-slate-900">
                   ₪{(parseFloat(form.paid_on_account) || 0).toLocaleString('he-IL')}
                 </strong>

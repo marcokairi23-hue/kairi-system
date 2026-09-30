@@ -9,7 +9,7 @@ This file records verified current KAIRI SYSTEM state. Update it only from repos
 - Active development branch: `main`
 - Normal Sprint strategy: MAIN-ONLY
 - Sprint 0 baseline: `5b105e7bb60cd56928b5a650591f990182208611`, verified equal to `origin/main` before work
-- Current phase: Sprint 0 workflow contract and project baseline established; next step is Supervisor review
+- Current phase: Sprint 1 New Order + Payment Gate implementation prepared; stopped at the production migration approval gate
 - Authoritative workflow: `CHATGPT_WORKSPACE/WORKFLOW_V1.md`
 - Task queue/checklist: `CHATGPT_WORKSPACE/TASKS.md`
 - Decision record: `CHATGPT_WORKSPACE/DECISIONS.md`
@@ -27,6 +27,19 @@ Historical branches `codex/kairi-development` and `codex/order-page-layout` rema
 - Activity combines order/item history with payment records.
 - Installer name and two installation signature URL fields exist; order completion is suggested after both signatures.
 - Sprint 0 validation: `npm run build` passes; Vite reports the existing large-bundle advisory (main JS chunk exceeds 500 kB after minification).
+
+## Sprint 1 migration-ready state
+
+- New-order routes are exactly Cash, Check, Credit Card, Bank Transfer, and Quote; `pay_later` is removed from new-order creation without rewriting historical data.
+- Cash/Check require a positive deposit and create a `received` payment.
+- Credit Card/Bank Transfer require and preserve a positive requested deposit, create a `pending` payment, and keep the order in `pending_payment`.
+- Quote creates no payment and keeps all items outside execution.
+- All application payment totals now count only `received` payments.
+- Order Detail shows pending route, requested amount, remaining balance, and Office/Admin confirm/reject actions. Sales can view but cannot act.
+- Migration `0015_payment_gate_v1.sql` adds the payment lifecycle, conservative historical backfill, server timestamps, ownership-scoped payment RLS, atomic confirmation/rejection RPCs, and database payment-gate guards.
+- `npm run build` passes with the existing large-bundle advisory.
+- The migration has not been applied to production and no live data has been changed.
+- Runtime use-case verification is pending migration approval and application.
 
 ## Verified contract gaps
 
@@ -56,7 +69,7 @@ Historical branches `codex/kairi-development` and `codex/order-page-layout` rema
 
 ## Next action
 
-Supervisor review of Sprint 0, including the open decisions in `WORKFLOW_V1.md`. Do not begin Sprint 1 or create a migration until the human chooses the next approved scope.
+Human review and explicit approval of `supabase/migrations/0015_payment_gate_v1.sql`. After approval: apply the migration, verify Cash, Check, Credit Card confirmation, Bank Transfer confirmation, Quote, and mixed pending/received balance behavior, then complete the remaining Sprint 1 gates. Do not begin Sprint 2.
 
 ## Maintenance
 

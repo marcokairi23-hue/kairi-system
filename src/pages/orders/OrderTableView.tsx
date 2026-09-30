@@ -4,6 +4,7 @@ import OrderActions, { ActionOrder } from './OrderActions'
 import {
   ORDER_STATUS_LABELS, ORDER_STATUS_COLORS, calcProgress, fmt,
 } from '../../lib/statusHelpers'
+import { sumReceivedPayments } from '../../lib/payments'
 
 type SortKey = 'order_number' | 'customer' | 'created_at' | 'total' | 'status'
 
@@ -52,7 +53,7 @@ export default function OrderTableView({
         </thead>
         <tbody className="divide-y">
           {orders.map(o => {
-            const paid = (o.payments ?? []).reduce((s, p) => s + p.amount, 0)
+            const paid = sumReceivedPayments(o.payments ?? [])
             const remaining = o.final_total - paid
             const prog = calcProgress(o.order_items)
 

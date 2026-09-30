@@ -4,6 +4,7 @@ import OrderActions, { ActionOrder } from './OrderActions'
 import {
   ORDER_STATUS_LABELS, ORDER_STATUS_COLORS, calcProgress, fmt,
 } from '../../lib/statusHelpers'
+import { sumReceivedPayments } from '../../lib/payments'
 
 interface Props {
   orders: (ActionOrder & { created_at: string })[]
@@ -16,7 +17,7 @@ export default function OrderCardView({ orders, onPayment, onItemStatus, onAdvan
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
       {orders.map(o => {
-        const paid = (o.payments ?? []).reduce((s, p) => s + p.amount, 0)
+        const paid = sumReceivedPayments(o.payments ?? [])
         const remaining = o.final_total - paid
         const prog = calcProgress(o.order_items)
 

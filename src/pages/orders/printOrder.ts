@@ -1,5 +1,6 @@
 import { OrderForm, calcItemsTotal, calcRemaining } from './types'
 import { uid } from '../../lib/uid'
+import { PaymentRecord, sumReceivedPayments } from '../../lib/payments'
 
 const SHADING_LABELS: Record<string, string> = {
   zebra: 'זברה', venetian: 'ונציאני', roman: 'רומי', roller: 'גלילה',
@@ -230,10 +231,10 @@ export function buildFormFromOrder(order: {
     item_status: string
     notes?: string
   }>
-  payments?: Array<{ amount: number; method: string }>
+  payments?: PaymentRecord[]
 }): import('./types').OrderForm {
-  const paid = (order.payments ?? []).reduce((s, p) => s + p.amount, 0)
-  const method = order.payments?.[0]?.method ?? ''
+  const paid = sumReceivedPayments(order.payments ?? [])
+  const method = order.payments?.find(payment => payment.payment_status === 'received')?.method ?? ''
 
   const curtain_items = (order.order_items ?? [])
     .filter(i => i.family === 'curtain')

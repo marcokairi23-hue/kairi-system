@@ -5,6 +5,7 @@ import { useAuth } from '../lib/auth'
 import { ActivityRow, ActivityRowLine, fetchActivity } from './activity/ActivityLog'
 import { ORDER_STATUS_LABELS, ORDER_STATUS_COLORS, calcProgress, fmt } from '../lib/statusHelpers'
 import { useFeature } from '../lib/featureFlags'
+import { PaymentStatus, sumReceivedPayments } from '../lib/payments'
 
 const STATUS_CARDS: { tab: string; status: string }[] = [
   { tab: 'quote', status: 'quote' },
@@ -25,7 +26,7 @@ interface DashOrder {
   final_total: number
   created_at: string
   order_items?: Array<{ item_status: string; for_execution: boolean }>
-  payments?: Array<{ amount: number }>
+  payments?: Array<{ amount: number; payment_status?: PaymentStatus | null }>
 }
 
 export default function Dashboard() {
@@ -51,7 +52,7 @@ export default function Dashboard() {
   useEffect(() => {
     const load = async () => {
       const [ordersRes, historyRes, settingsRes, activityRows] = await Promise.all([
-        supabase.from('orders').select('id, order_number, status, customer_name_snapshot, final_total, created_at, order_items(item_status, for_execution), payments(amount)'),
+        supabase.from('orders').select('id, order_number, status, customer_name_snapshot, final_total, created_at, order_items(item_status, for_execution), payments(amount, payment_status)'),
         supabase.from('order_status_history').select('order_id, changed_at').order('changed_at', { ascending: false }),
         supabase.from('settings').select('value').eq('key', 'stuck_order_days').maybeSingle(),
         fetchActivity({ perSourceLimit: 10 }),
@@ -85,7 +86,7 @@ export default function Dashboard() {
   const activeOrders = orders.filter(o => o.status !== 'completed' && o.status !== 'cancelled')
 
   const openBalance = activeOrders.reduce((sum, o) => {
-    const paid = (o.payments ?? []).reduce((s, p) => s + p.amount, 0)
+    const paid = sumReceivedPayments(o.payments ?? [])
     return sum + Math.max(0, o.final_total - paid)
   }, 0)
 

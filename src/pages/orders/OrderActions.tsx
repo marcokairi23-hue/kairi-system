@@ -3,6 +3,7 @@ import { Printer, Wrench, MessageCircle, Pencil, Wallet, ClipboardList, ArrowLef
 import { printOrder, buildFormFromOrder } from './printOrder'
 import { getSignatureDataUrl } from '../../lib/uploadSignature'
 import { ORDER_STATUS_NEXT, ORDER_STATUS_LABELS, SHADING_LABELS, fmt } from '../../lib/statusHelpers'
+import { PaymentRecord, sumReceivedPayments } from '../../lib/payments'
 
 export interface ActionOrder {
   id: string
@@ -42,7 +43,7 @@ export interface ActionOrder {
     item_status: string
     notes?: string
   }>
-  payments?: Array<{ amount: number; method: string }>
+  payments?: PaymentRecord[]
 }
 
 interface Props {
@@ -59,7 +60,7 @@ export default function OrderActions({
   const navigate = useNavigate()
 
   const orderNum = order.order_number ?? 'טיוטה'
-  const paid = (order.payments ?? []).reduce((s, p) => s + p.amount, 0)
+  const paid = sumReceivedPayments(order.payments ?? [])
   const remaining = order.final_total - paid
   const nextStatus = ORDER_STATUS_NEXT[order.status]
 
@@ -131,21 +132,22 @@ ${paid > 0 ? `שולם: ${fmt(paid)}\nנשאר: ${fmt(remaining)}` : ''}
         <Pencil className={icon} />{!compact && <span className="text-xs">ערוך</span>}
       </button>
 
-      <button className={btn} title="הוספת תשלום"
-              onClick={e => { stop(e); onPayment() }}>
-        <Wallet className={icon} />{!compact && <span className="text-xs">תשלום</span>}
-      </button>
+      {order.status !== 'pending_payment' && (
+        <button className={btn} title="הוספת תשלום"
+                onClick={e => { stop(e); onPayment() }}>
+          <Wallet className={icon} />{!compact && <span className="text-xs">תשלום</span>}
+        </button>
+      )}
 
-      {/* מוצג בדיוק כמו "קדם" (nextStatus קיים) — כדי לבחון אותו כתחלופה מעשית לקידום
-          סטטוס ההזמנה, כולל בשני הסטטוסים שבהם רק "קדם" הופיע עד כה: quote/pending_payment. */}
-      {nextStatus && (
+      {/* פעולות קידום ופריטים מושבתות ב-pending_payment; רק אישור התשלום הסמכותי משחרר את ההזמנה. */}
+      {nextStatus && order.status !== 'pending_payment' && (
         <button className={btn} title="פריטים בהזמנה"
                 onClick={e => { stop(e); onItemStatus() }}>
           <ClipboardList className={icon} />{!compact && <span className="text-xs">פריטים</span>}
         </button>
       )}
 
-      {nextStatus && (
+      {nextStatus && order.status !== 'pending_payment' && (
         <button className={btn}
                 title={`קדם ל: ${ORDER_STATUS_LABELS[nextStatus]}`}
                 onClick={e => { stop(e); onAdvance() }}>

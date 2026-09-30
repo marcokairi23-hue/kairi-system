@@ -105,4 +105,4 @@ The contract requires separate payment, order, item, owner, permission, timestam
 
 ## Current next action
 
-Supervisor review of the Sprint 0 workflow contract and open decisions. Do not begin Sprint 1 until directed by the human.
+Review and explicitly approve `supabase/migrations/0015_payment_gate_v1.sql` for production application. Sprint 1 code is prepared but must not be committed, pushed, or treated as complete until the migration is approved, applied, and all payment-route use cases are verified end to end.

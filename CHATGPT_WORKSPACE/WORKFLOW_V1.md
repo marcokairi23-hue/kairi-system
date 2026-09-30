@@ -336,7 +336,7 @@ Evidence inspected: `main` at `5b105e7`, recent commits, `src/pages/orders`, `sr
 
 ### Existing foundations
 
-- New order supports stable routes `cash`, `check`, `credit_card`, `bank_transfer`, `pay_later`, and `quote` in frontend types.
+- New order supports the V1 routes `cash`, `check`, `credit_card`, `bank_transfer`, and `quote`; Sprint 1 removes `pay_later` from new-order creation.
 - Cash/check currently create an order in database status `ready`; card/transfer become `pending_payment`; quote items are saved with `for_execution = false`.
 - Item-level `production_route` is used by the code: curtains are saved `internal`, shading `external`, and the UI resolves these to Cutter/Office routes.
 - Production/item screens group work by order and allow subset selection, work-instruction printing, bulk progression, and item history inserts.
@@ -348,7 +348,6 @@ Evidence inspected: `main` at `5b105e7`, recent commits, `src/pages/orders`, `sr
 ### Gaps between repository and this contract
 
 - `payments` has no explicit payment approval/status or custody state; existing rows are treated as received amounts.
-- The `pay_later` frontend route is not defined in this V1 business contract and needs mapping or removal.
 - `production_route` and supplier/date columns are referenced by code/migrations, but their original creation is not present in the committed migration chain. The repository alone cannot reconstruct the live schema from zero.
 - The committed `item_status` enum creation lacks `ordered_from_supplier` and `arrived` even though current code uses them.
 - Current roles are `admin`, `office`, `sales`, and `viewer`; Cutter and Installer roles are not implemented.
@@ -387,10 +386,9 @@ V1 entities and event links must permit these additions without encoding them no
 1. Define the pickup handover and completion path, including whether pickup needs customer acknowledgement, an employee signature, both installation-style signatures, or a different closure rule.
 2. Decide whether Office may create orders in normal operation or only Admin/Sales.
 3. Decide whether Sales may cancel its own order before payment approval; Office/Admin cancellation remains the safe default.
-4. Map or remove the existing `pay_later` route because it is not one of the approved V1 payment routes.
-5. Define payment approval reversal/correction behavior after work has started.
-6. Decide whether supplier `ORDERED → READY` needs an intermediate received/arrived state in V1; the approved workflow only requires Ordered then Ready.
-7. Define exact photo retention, formats, size limits, and access policy.
-8. Choose canonical database codes and backward-compatible mapping from current order/item enums during the implementation migration.
-9. Reconcile the missing committed schema history for `production_route`, supplier/date fields, and extended item statuses before any new migration is designed.
-10. Decide whether cutter and installer become database roles or scoped permissions layered on another role; the V1 permission outcomes above are mandatory either way.
+4. Define payment approval reversal/correction behavior after work has started.
+5. Decide whether supplier `ORDERED → READY` needs an intermediate received/arrived state in V1; the approved workflow only requires Ordered then Ready.
+6. Define exact photo retention, formats, size limits, and access policy.
+7. Choose canonical database codes and backward-compatible mapping from current order/item enums during the implementation migration.
+8. Reconcile the missing committed schema history for `production_route`, supplier/date fields, and extended item statuses before any new migration is designed.
+9. Decide whether cutter and installer become database roles or scoped permissions layered on another role; the V1 permission outcomes above are mandatory either way.

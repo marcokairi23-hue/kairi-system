@@ -2,20 +2,76 @@
 
 ## ACTIVE
 
-- Supervisor review of `WORKFLOW_V1.md`, repository gaps, and open decisions.
+- Review and explicitly approve `supabase/migrations/0015_payment_gate_v1.sql` for production application.
+- Sprint 1 is stopped at the migration safety gate; do not commit or push yet.
 
 ## NEXT
 
-- Await human direction for Sprint 1; do not begin implementation automatically.
-- Reconcile missing committed schema history before designing payment/workflow migrations.
-- Resolve pickup closure, role representation, `pay_later`, and canonical state-code decisions.
+- After explicit approval, apply migration `0015`, run all Sprint 1 payment-route and balance use cases, review the final tree, then create the Sprint checkpoint.
+- Do not begin Sprint 2.
 
 ## BLOCKED / OPEN DECISIONS
 
 - Pickup handover and completion requirements are not defined.
 - Cutter/Installer database-role strategy is not defined.
-- `pay_later` is present in code but is outside the approved V1 payment-route list.
 - Existing production schema cannot be reconstructed completely from committed migrations.
+
+## SPRINT 1 CHECKLIST
+
+[x] Git preflight passed on main
+[x] Local main == origin/main at Sprint start
+[x] Current payment implementation revalidated
+[x] pay_later removed from V1 new-order flow
+[x] V1 payment route type/options updated
+[x] Pending payment amount preserved for card/transfer
+[x] Payment status model implemented in migration
+[x] Existing received payment history preserved safely
+[x] Pending payment does not count toward paid balance
+[x] Rejected payment does not count toward paid balance
+[x] All payment/balance consumers reviewed
+[x] Cash order requires deposit > 0
+[x] Check order requires deposit > 0
+[x] Cash creates RECEIVED payment
+[x] Check creates RECEIVED payment
+[x] Credit card requires requested deposit > 0
+[x] Bank transfer requires requested deposit > 0
+[x] Credit card creates PENDING payment request
+[x] Bank transfer creates PENDING payment request
+[x] Card/transfer order remains pending_payment before confirmation
+[x] Quote creates no execution payment
+[x] Quote items remain outside execution
+[x] Office/Admin confirmation UI implemented
+[x] Sales cannot confirm office payment
+[x] Confirmation is enforced server-side
+[x] Confirmation RPC is transactional
+[x] Confirmation changes payment PENDING → RECEIVED
+[x] Confirmation records actor + timestamp
+[x] Confirmation advances order from pending_payment
+[x] Confirmation writes order history
+[x] Rejection flow implemented
+[x] Rejection records reason + actor + timestamp
+[x] Payment RLS reviewed and tightened only as required
+[x] No Sprint 2 routing behavior implemented
+[x] WORKFLOW_V1 remains consistent
+[x] DECISIONS.md updated with pay_later decision
+[x] PROJECT_STATE.md updated
+[x] TASKS.md updated
+[x] Relevant domain CHAT files updated
+[x] npm run build passes
+[x] Full diff reviewed
+[x] No unrelated files changed
+[ ] Production migration explicitly approved
+[ ] Production migration applied successfully
+[ ] Cash use case verified
+[ ] Check use case verified
+[ ] Credit-card pending → confirmation verified
+[ ] Bank-transfer pending → confirmation verified
+[ ] Quote use case verified
+[ ] Balance verified with pending + received payments
+[ ] Final working tree reviewed
+[ ] Sprint checkpoint committed on main
+[ ] main pushed to origin/main
+[ ] HEAD == origin/main after push
 
 ## SPRINT 0 CHECKLIST
 

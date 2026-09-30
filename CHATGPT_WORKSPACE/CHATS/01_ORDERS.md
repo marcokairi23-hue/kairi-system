@@ -2,10 +2,8 @@
 
 ## Scope
 
-- Order creation
-- Order editing
-- Order items
-- Accessories
+- Order creation and editing
+- Order items and accessories
 - Payments
 - Order and item status flows
 
@@ -15,23 +13,22 @@ Before starting work, read `../PROJECT_CONTEXT.md`, `../WORK_RULES.md`, `../KAIR
 
 ## Current context
 
-Order V1 Phase A is implemented on `codex/order-page-layout` and remains uncommitted. New/edit forms provide `מלא הכל` and `מלא חלקי`; selected items determine item total, wall width, and a suggested but editable `final_total`. The selection dialog preserves every unselected item while marking it outside current execution.
+Sprint 1 New Order + Payment Gate code is prepared on `main` and is stopped before production migration application.
 
-New-order routing uses stable frontend codes. Cash/check create the existing received-payment row and enter the operational flow through internal `ready`. Credit card, bank transfer, and pay later use `pending_payment` without creating a fake received payment. Quote items are preserved with `for_execution = false`. The duplicate submission-time execution selection was replaced by a short confirmation.
+- New-order routes are exactly `cash`, `check`, `credit_card`, `bank_transfer`, and `quote`; `pay_later` is no longer offered.
+- Cash/Check require a positive deposit and create a received payment.
+- Card/Transfer require and preserve a positive requested deposit, create a pending request, and leave the order in `pending_payment`.
+- Quote creates no payment and sets all items outside execution.
+- Pending Order Detail shows request facts to Sales and explicit confirm/reject actions only to Office/Admin.
+- Generic received-payment entry is limited to Cash/Check; pending card/transfer confirmation uses the authoritative RPC.
+- Every displayed paid/remaining total uses received payments only.
 
-## Open issues
+## Pending gate
 
-- Manual mobile, desktop, and RTL verification of Phase A is pending.
-- Pending deposit requests and cash/check custody require Phase B schema support.
-- The office `pending_payment` flow still needs Phase B alignment with automatic routing after confirmed collection.
-- The long-term relationship between “advance” and “items” is undecided.
-
-## Decisions
-
-- Full/partial execution selection is canonical for Phase A.
-- `final_total` remains semi-automatic and manually editable.
-- Accessories remain order-level and outside partial selection.
+- Migration `0015_payment_gate_v1.sql` is not applied to production.
+- End-to-end use-case verification must wait for explicit migration approval and successful application.
+- Do not commit/push the Sprint checkpoint until every Sprint 1 checklist item is complete.
 
 ## Next action
 
-Human-review new/edit order behavior and routing, then implement the approved Phase B payment/custody model.
+Review and approve migration `0015`, then verify all five new-order routes and received-only balance behavior. Do not begin Sprint 2 routing.

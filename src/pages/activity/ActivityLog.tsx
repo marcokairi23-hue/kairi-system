@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react'
 import { Link } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { ORDER_STATUS_LABELS, ITEM_STATUS_LABELS } from '../../lib/statusHelpers'
+import { PaymentStatus } from '../../lib/payments'
 
 const PAGE_SIZE = 50
 
@@ -26,6 +27,9 @@ export interface PaymentActivityRow extends BaseRow {
   source: 'payment'
   amount: number
   method: string | null
+  payment_status: PaymentStatus
+  payment_route: string | null
+  rejection_reason: string | null
 }
 
 export type ActivityRow = StatusActivityRow | PaymentActivityRow
@@ -33,6 +37,12 @@ export type ActivityTypeFilter = 'all' | 'order' | 'item' | 'payment'
 
 function describe(row: ActivityRow): string {
   if (row.source === 'payment') {
+    if (row.payment_status === 'pending') {
+      return `בקשת מקדמה ${fmtAmount(row.amount)} ממתינה${row.method ? ` (${row.method})` : ''}`
+    }
+    if (row.payment_status === 'rejected') {
+      return `בקשת מקדמה ${fmtAmount(row.amount)} נדחתה${row.rejection_reason ? ` — ${row.rejection_reason}` : ''}`
+    }
     return `תשלום ₪${row.amount.toLocaleString()}${row.method ? ` (${row.method})` : ''}`
   }
   if (row.order_item_id) {
@@ -44,6 +54,8 @@ function describe(row: ActivityRow): string {
   }
   return row.note || `→ ${ORDER_STATUS_LABELS[row.to_status] ?? row.to_status}`
 }
+
+const fmtAmount = (amount: number) => `₪${amount.toLocaleString()}`
 
 export function dayLabel(iso: string): string {
   return new Date(iso).toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit', year: 'numeric' })
@@ -87,20 +99,25 @@ export async function fetchActivity(opts: {
   if (wantPayment) {
     let q = supabase
       .from('payments')
-      .select('*, profiles(full_name), orders(order_number)')
-      .order('paid_at', { ascending })
+      .select('*, recorded_profile:profiles!payments_recorded_by_fkey(full_name), received_profile:profiles!payments_received_by_fkey(full_name), rejected_profile:profiles!payments_rejected_by_fkey(full_name), orders(order_number)')
+      .order('updated_at', { ascending })
     if (orderId) q = q.eq('order_id', orderId)
-    if (userId) q = q.eq('received_by', userId)
+    if (userId) q = q.or(`recorded_by.eq.${userId},received_by.eq.${userId},rejected_by.eq.${userId}`)
     if (perSourceLimit) q = q.limit(perSourceLimit)
     const { data } = await q
     paymentRows.push(...(data ?? []).map((r: any): PaymentActivityRow => ({
       source: 'payment',
       id: r.id,
       order_id: r.order_id,
-      changed_at: r.paid_at,
+      changed_at: r.updated_at ?? r.paid_at ?? r.rejected_at ?? r.requested_at,
       amount: r.amount,
       method: r.method,
-      profiles: r.profiles,
+      payment_status: r.payment_status ?? 'received',
+      payment_route: r.payment_route,
+      rejection_reason: r.rejection_reason,
+      profiles: r.payment_status === 'rejected'
+        ? r.rejected_profile
+        : r.payment_status === 'pending' ? r.recorded_profile : r.received_profile ?? r.recorded_profile,
       orders: r.orders,
     })))
   }

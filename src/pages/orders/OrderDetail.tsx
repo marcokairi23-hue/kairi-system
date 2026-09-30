@@ -4,9 +4,10 @@ import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/auth'
 import { printOrder, buildFormFromOrder } from './printOrder'
 import OrderActivityTab from './OrderActivityTab'
-import ItemSelectionDialog from './ItemSelectionDialog'
 import StatusSuggestionBanner from './StatusSuggestionBanner'
 import PaymentModal from './PaymentModal'
+import PendingPaymentPanel from './PendingPaymentPanel'
+import { PaymentRecord, sumReceivedPayments } from '../../lib/payments'
 import { getSignatureUrl, getSignatureDataUrl, uploadSignature } from '../../lib/uploadSignature'
 import SignatureModal from '../../components/SignatureModal'
 import { generateOrderPdf } from '../../lib/generateOrderPdf'
@@ -37,13 +38,6 @@ interface OrderItem {
   notes?: string
 }
 
-interface Payment {
-  id: string
-  amount: number
-  method: string
-  paid_at: string
-}
-
 interface Order {
   id: string
   order_number: number | null
@@ -71,7 +65,7 @@ interface Order {
   created_at: string
   profiles?: { full_name: string }
   order_items?: OrderItem[]
-  payments?: Payment[]
+  payments?: PaymentRecord[]
 }
 
 
@@ -96,8 +90,6 @@ export default function OrderDetail() {
   const [makeResult, setMakeResult] = useState<'ok' | 'error' | null>(null)
   const [syncingPdf, setSyncingPdf] = useState(false)
   const [syncError, setSyncError] = useState<string | null>(null)
-  const [officeSelectionOpen, setOfficeSelectionOpen] = useState(false)
-  const [showProductionSuggestion, setShowProductionSuggestion] = useState(false)
   const [installers, setInstallers] = useState<string[]>([])
   const [showInstallerSuggestion, setShowInstallerSuggestion] = useState(false)
   const [installCustomerSigOpen, setInstallCustomerSigOpen] = useState(false)
@@ -156,7 +148,7 @@ export default function OrderDetail() {
   if (loading) return <div className="text-slate-500 p-4">טוען...</div>
   if (!order) return <div className="text-red-500 p-4">הזמנה לא נמצאה</div>
 
-  const paid = (order.payments ?? []).reduce((s, p) => s + p.amount, 0)
+  const paid = sumReceivedPayments(order.payments ?? [])
   const remaining = order.final_total - paid
   const curtains = (order.order_items ?? []).filter(i => i.family === 'curtain')
   const shadings = (order.order_items ?? []).filter(i => i.family === 'shading')
@@ -180,18 +172,6 @@ export default function OrderDetail() {
     })
     await load()
     setUpdatingStatus(false)
-  }
-
-  const confirmOfficeSelection = async (selectedIds: Set<string>) => {
-    const items = order.order_items ?? []
-    await Promise.all(items.map(item =>
-      supabase.from('order_items')
-        .update({ for_execution: selectedIds.has(item.id) })
-        .eq('id', item.id)
-    ))
-    setOfficeSelectionOpen(false)
-    setShowProductionSuggestion(true)
-    await load()
   }
 
   const assignInstaller = async (name: string) => {
@@ -397,9 +377,7 @@ export default function OrderDetail() {
           </div>
           <div className="flex gap-2">
             {order.status === 'pending_payment' ? (
-              <button className="btn-primary text-sm py-1.5" onClick={() => setOfficeSelectionOpen(true)}>
-                🎯 בחירה סופית
-              </button>
+              <span className="text-xs text-amber-700">נדרש אישור משרד</span>
             ) : order.status === 'ready_for_install' ? (
               <select
                 className="input text-sm py-1.5"
@@ -421,16 +399,15 @@ export default function OrderDetail() {
         </div>
       )}
 
-      {showProductionSuggestion && order.status === 'pending_payment' && (
-        <div className="mb-3">
-          <StatusSuggestionBanner
-            orderId={id!}
-            currentStatus={order.status}
-            suggestedStatus="in_production"
-            reason="בחירה סופית בוצעה — להעביר לייצור?"
-            onApplied={() => { setShowProductionSuggestion(false); load() }}
-          />
-        </div>
+      {order.status === 'pending_payment' && (
+        <PendingPaymentPanel
+          orderNumber={orderNum}
+          customerName={order.customer_name_snapshot}
+          finalTotal={order.final_total}
+          receivedTotal={paid}
+          payments={order.payments ?? []}
+          onDone={load}
+        />
       )}
 
       {showInstallerSuggestion && order.status === 'ready_for_install' && (
@@ -775,19 +752,6 @@ export default function OrderDetail() {
         </div>
       )}
 
-      <ItemSelectionDialog
-        open={officeSelectionOpen}
-        items={(order.order_items ?? []).map(i => ({
-          id: i.id, family: i.family, location: i.location, subtype: i.subtype,
-          width_m: i.width_m,
-          fabric_text: i.family === 'curtain' ? i.fabric_text : i.color_fabric_text,
-          price: i.price, for_execution: i.for_execution,
-        }))}
-        orderTotal={order.final_total}
-        stage="office"
-        onConfirm={confirmOfficeSelection}
-        onClose={() => setOfficeSelectionOpen(false)}
-      />
     </div>
   )
 }

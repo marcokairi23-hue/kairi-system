@@ -1,7 +1,7 @@
 import { uid } from '../../lib/uid'
 
 export type ItemFamily = 'curtain' | 'shading'
-export type PaymentRoute = 'cash' | 'check' | 'credit_card' | 'bank_transfer' | 'pay_later' | 'quote'
+export type PaymentRoute = 'cash' | 'check' | 'credit_card' | 'bank_transfer' | 'quote'
 // טקסט חופשי (לא enum) — ניתן לעריכה מעמוד ההגדרות, ראו migration 0011.
 export type ShadingSubtype = string
 export type ItemStatus = 'new' | 'cut' | 'sewing' | 'ready' | 'installed' | 'cancelled'
@@ -86,7 +86,6 @@ export const PAYMENT_ROUTE_OPTIONS: { value: PaymentRoute; label: string }[] = [
   { value: 'check', label: 'צ׳ק' },
   { value: 'credit_card', label: 'אשראי' },
   { value: 'bank_transfer', label: 'העברה בנקאית' },
-  { value: 'pay_later', label: 'ישולם בהמשך' },
   { value: 'quote', label: 'הצעת מחיר' },
 ]
 export const ITEM_STATUSES: { value: ItemStatus; label: string }[] = [
