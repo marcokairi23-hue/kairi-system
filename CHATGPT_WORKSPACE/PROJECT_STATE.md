@@ -9,7 +9,7 @@ This file records verified current KAIRI SYSTEM state. Update it only from repos
 - Active development branch: `main`
 - Normal Sprint strategy: MAIN-ONLY
 - Sprint 0 baseline: `5b105e7bb60cd56928b5a650591f990182208611`, verified equal to `origin/main` before work
-- Current phase: Sprint 1 New Order + Payment Gate preparation is committed; Run 1.2 is awaiting commit review and production migration approval
+- Current phase: Run 1.2 is committed and pushed; Run 1.3 database payment-gate strengthening awaits commit review
 - Authoritative workflow: `CHATGPT_WORKSPACE/WORKFLOW_V1.md`
 - Task queue/checklist: `CHATGPT_WORKSPACE/TASKS.md`
 - Decision record: `CHATGPT_WORKSPACE/DECISIONS.md`
@@ -31,6 +31,7 @@ Historical branches `codex/kairi-development` and `codex/order-page-layout` rema
 ## Sprint 1 migration-ready state
 
 - Preparation commit `be4178b` exists on `main` and has been pushed to `origin/main`.
+- Run 1.2 checkpoint `3160633` exists on `main` and has been pushed to `origin/main`.
 - New-order routes are exactly Cash, Check, Credit Card, Bank Transfer, and Quote; `pay_later` is removed from new-order creation without rewriting historical data.
 - Cash/Check require a positive deposit, start in non-operational `draft`, create a `received` payment, and move to `ready` only after that insert succeeds.
 - Credit Card/Bank Transfer require and preserve a positive requested deposit, create a `pending` payment, and keep the order in `pending_payment`.
@@ -38,9 +39,12 @@ Historical branches `codex/kairi-development` and `codex/order-page-layout` rema
 - All application payment totals now count only `received` payments.
 - Order Detail shows pending route, requested amount, remaining balance, and Office/Admin confirm/reject actions. Sales can view but cannot act.
 - Migration `0015_payment_gate_v1.sql` adds the payment lifecycle, conservative historical backfill, server timestamps, ownership-scoped payment RLS, atomic confirmation/rejection RPCs, and database payment-gate guards.
+- Run 1.3 strengthens its order trigger: `draft` cannot enter an operational status without a received payment, while `pending_payment` additionally requires the confirmation RPC transaction marker.
+- The confirmation RPC remains compatible because it atomically marks the payment received before setting the marker and releasing the order.
 - `npm run build` passes with the existing large-bundle advisory.
 - The migration has not been applied to production and no live data has been changed.
 - End-to-end payment verification is not complete and remains pending migration approval and application.
+- Sprint 1 is incomplete; no production migration has been applied.
 
 ## Verified contract gaps
 

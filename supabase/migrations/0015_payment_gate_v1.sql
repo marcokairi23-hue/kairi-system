@@ -183,14 +183,49 @@ returns trigger
 language plpgsql
 set search_path = public
 as $$
+declare
+  v_is_operational_target boolean;
+  v_has_received_payment boolean;
+  v_confirmed_order_id text;
 begin
-  if old.status = 'pending_payment'
-     and new.status is distinct from old.status
-     and new.status <> 'cancelled'
-     and coalesce(current_setting('kairi.confirmed_payment_order_id', true), '') <> old.id::text then
-    raise exception 'pending_payment orders may advance only through confirm_pending_payment_v1'
+  if new.status is not distinct from old.status then
+    return new;
+  end if;
+
+  v_is_operational_target := new.status::text not in (
+    'draft', 'quote', 'pending_payment', 'cancelled'
+  );
+
+  -- Quote/cancellation/non-operational changes do not cross the payment gate.
+  if old.status::text not in ('draft', 'pending_payment')
+     or not v_is_operational_target then
+    return new;
+  end if;
+
+  select exists (
+    select 1
+    from public.payments p
+    where p.order_id = old.id
+      and p.payment_status = 'received'
+  ) into v_has_received_payment;
+
+  if not v_has_received_payment then
+    raise exception 'order may not enter operational execution without a received payment'
       using errcode = '42501';
   end if;
+
+  if old.status = 'pending_payment' then
+    v_confirmed_order_id := coalesce(
+      current_setting('kairi.confirmed_payment_order_id', true),
+      ''
+    );
+
+    if v_confirmed_order_id <> old.id::text then
+      raise exception 'pending_payment orders may advance only through confirm_pending_payment_v1'
+        using errcode = '42501';
+    end if;
+  end if;
+
   return new;
 end;
 $$;

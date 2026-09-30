@@ -3,13 +3,21 @@
 ## ACTIVE
 
 - Review and explicitly approve `supabase/migrations/0015_payment_gate_v1.sql` for production application.
-- Review Sprint 1 Run 1.2 changes; do not commit, push, or apply the migration in this run.
+- Review Sprint 1 Run 1.3 changes; do not commit, push, or apply the migration in this run.
 
 ## SPRINT 1 RUN 1.2
 
 [x] Cash/Check orders remain non-operational until the received payment insert succeeds
 [x] `CHATGPT_WORKSPACE/TEMP_ANS.md` supervisor report added
 [x] Workspace state synchronized with the preparation commit and migration/test facts
+
+## SPRINT 1 RUN 1.3
+
+[x] Draft-to-operational transition requires an existing received payment in the database
+[x] Pending-payment operational release still requires the confirmation RPC marker and a received payment
+[x] Confirmation RPC order remains compatible: payment update, transaction marker, then order release
+[x] Run 1.2 checkpoint `3160633` verified committed and pushed to `origin/main`
+[x] Migration remains unapplied and Sprint 1 remains incomplete
 
 ## NEXT
 
