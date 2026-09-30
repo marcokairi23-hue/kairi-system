@@ -6,6 +6,8 @@ export interface SelectableItem {
   family: 'curtain' | 'shading'
   location: string
   subtype?: string
+  width_m: number
+  fabric_text?: string
   price: number
   for_execution: boolean
 }
@@ -22,9 +24,9 @@ interface ItemSelectionDialogProps {
 const itemLabel = (item: SelectableItem) => {
   if (item.family === 'shading') {
     const subtypeLabel = (item.subtype && SHADING_LABELS[item.subtype]) ?? item.subtype
-    return `${item.location || 'ללא מיקום'} — ${subtypeLabel}`
+    return `${item.location || 'ללא מיקום'} — ${subtypeLabel || 'הצללה'}`
   }
-  return item.location || 'ללא מיקום'
+  return `${item.location || 'ללא מיקום'} — וילון`
 }
 
 export default function ItemSelectionDialog({
@@ -58,6 +60,9 @@ export default function ItemSelectionDialog({
   const selectedTotal = items
     .filter(i => selected.has(i.id))
     .reduce((s, i) => s + (i.price || 0), 0)
+  const selectedItems = items.filter(i => selected.has(i.id))
+  const selectedWidth = selectedItems.reduce((sum, item) => sum + (item.width_m || 0), 0)
+  const allSelected = items.length > 0 && selected.size === items.length
 
   const overBudget = selectedTotal > orderTotal
 
@@ -70,9 +75,14 @@ export default function ItemSelectionDialog({
         </p>
 
         <div className="flex justify-between mb-2">
-          <button className="text-xs text-blue-600 hover:underline" onClick={selectAll}>
+          <label className="flex items-center gap-2 text-xs font-medium text-blue-700">
+            <input
+              type="checkbox"
+              checked={allSelected}
+              onChange={() => allSelected ? clearAll() : selectAll()}
+            />
             בחר הכל
-          </button>
+          </label>
           <button className="text-xs text-slate-500 hover:underline" onClick={clearAll}>
             נקה הכל
           </button>
@@ -85,25 +95,38 @@ export default function ItemSelectionDialog({
             items.map(item => (
               <label
                 key={item.id}
-                className="flex items-center justify-between gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm"
+                className="grid grid-cols-[auto_1fr_auto] items-center gap-2 rounded-lg border border-slate-200 px-3 py-2 text-sm"
               >
-                <span className="flex items-center gap-2">
-                  <input
-                    type="checkbox"
-                    checked={selected.has(item.id)}
-                    onChange={() => toggle(item.id)}
-                  />
-                  {itemLabel(item)}
+                <input
+                  type="checkbox"
+                  checked={selected.has(item.id)}
+                  onChange={() => toggle(item.id)}
+                />
+                <span className="min-w-0">
+                  <span className="block font-medium text-slate-700">{itemLabel(item)}</span>
+                  <span className="block text-xs text-slate-500">
+                    רוחב {item.width_m.toFixed(2)} מ׳{item.fabric_text ? ` · ${item.fabric_text}` : ''}
+                  </span>
                 </span>
-                <span className="text-slate-500">₪{(item.price || 0).toLocaleString()}</span>
+                <span className="whitespace-nowrap text-slate-600">₪{(item.price || 0).toLocaleString()}</span>
               </label>
             ))
           )}
         </div>
 
-        <div className="flex items-center justify-between text-sm font-medium mb-2">
-          <span>סה״כ נבחר</span>
-          <span>₪{selectedTotal.toLocaleString()}</span>
+        <div className="grid grid-cols-3 gap-2 rounded-lg bg-slate-50 p-3 text-center text-xs mb-2">
+          <div>
+            <div className="text-slate-500">פריטים</div>
+            <div className="font-bold text-slate-800">{selectedItems.length}</div>
+          </div>
+          <div>
+            <div className="text-slate-500">רוחב כולל</div>
+            <div className="font-bold text-slate-800">{selectedWidth.toFixed(2)} מ׳</div>
+          </div>
+          <div>
+            <div className="text-slate-500">סה״כ נבחר</div>
+            <div className="font-bold text-slate-800">₪{selectedTotal.toLocaleString()}</div>
+          </div>
         </div>
 
         {overBudget && (

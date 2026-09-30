@@ -1,6 +1,7 @@
 import { uid } from '../../lib/uid'
 
 export type ItemFamily = 'curtain' | 'shading'
+export type PaymentRoute = 'cash' | 'check' | 'credit_card' | 'bank_transfer' | 'pay_later' | 'quote'
 // טקסט חופשי (לא enum) — ניתן לעריכה מעמוד ההגדרות, ראו migration 0011.
 export type ShadingSubtype = string
 export type ItemStatus = 'new' | 'cut' | 'sewing' | 'ready' | 'installed' | 'cancelled'
@@ -54,6 +55,7 @@ export interface OrderForm {
   customer_name: string
   phone: string
   address: string
+  city?: string
   agent_name: string
   // פריטים
   curtain_items: CurtainItem[]
@@ -79,6 +81,14 @@ export const SHADING_SUBTYPES = ['זברה', 'ונציאני', 'רומי', 'גל
 export const MOUNT_TYPES = ['תקרה', 'רגלי קיר']
 export const MECHANISM_SIDES = ['ימין', 'שמאל', 'שני צדדים']
 export const PAYMENT_METHODS = ['מזומן', 'אשראי', 'העברה בנקאית', 'ביט', "צ'ק"]
+export const PAYMENT_ROUTE_OPTIONS: { value: PaymentRoute; label: string }[] = [
+  { value: 'cash', label: 'מזומן' },
+  { value: 'check', label: 'צ׳ק' },
+  { value: 'credit_card', label: 'אשראי' },
+  { value: 'bank_transfer', label: 'העברה בנקאית' },
+  { value: 'pay_later', label: 'ישולם בהמשך' },
+  { value: 'quote', label: 'הצעת מחיר' },
+]
 export const ITEM_STATUSES: { value: ItemStatus; label: string }[] = [
   { value: 'new', label: 'חדש' },
   { value: 'cut', label: 'נגזר' },
@@ -87,6 +97,18 @@ export const ITEM_STATUSES: { value: ItemStatus; label: string }[] = [
   { value: 'installed', label: 'הותקן' },
   { value: 'cancelled', label: 'מבוטל' },
 ]
+
+export const MIN_ITEM_WIDTH_M = 0.3
+export const MAX_ITEM_WIDTH_M = 10
+
+export function isValidItemWidth(value: string): boolean {
+  const width = Number(value)
+  return value.trim() !== '' && Number.isFinite(width) && width >= MIN_ITEM_WIDTH_M && width <= MAX_ITEM_WIDTH_M
+}
+
+export function hasInvalidItemWidths(form: OrderForm): boolean {
+  return [...form.curtain_items, ...form.shading_items].some(item => !isValidItemWidth(item.width_m))
+}
 
 export function newCurtainItem(): CurtainItem {
   return {
@@ -130,6 +152,7 @@ export function emptyForm(agentName: string): OrderForm {
     customer_name: '',
     phone: '',
     address: '',
+    city: '',
     agent_name: agentName,
     curtain_items: [],
     shading_items: [],

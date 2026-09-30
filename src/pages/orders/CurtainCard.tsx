@@ -1,4 +1,7 @@
-import { CurtainItem, SEWING_TYPES, ITEM_STATUSES } from './types'
+import {
+  CurtainItem, SEWING_TYPES, ITEM_STATUSES,
+  MIN_ITEM_WIDTH_M, MAX_ITEM_WIDTH_M, isValidItemWidth,
+} from './types'
 import { Field } from './FormFields'
 
 interface Props {
@@ -7,10 +10,14 @@ interface Props {
   onChange: (item: CurtainItem) => void
   onRemove: () => void
   sewingTypes?: string[]
+  creationMode?: boolean
 }
 
-export default function CurtainCard({ item, index, onChange, onRemove, sewingTypes = SEWING_TYPES }: Props) {
+export default function CurtainCard({
+  item, index, onChange, onRemove, sewingTypes = SEWING_TYPES, creationMode = false,
+}: Props) {
   const set = (k: keyof CurtainItem, v: unknown) => onChange({ ...item, [k]: v })
+  const widthInvalid = item.width_m !== '' && !isValidItemWidth(item.width_m)
 
   return (
     <div className="border border-purple-200 rounded-lg bg-white overflow-hidden mb-3">
@@ -23,11 +30,13 @@ export default function CurtainCard({ item, index, onChange, onRemove, sewingTyp
           )}
         </div>
         <div className="flex items-center gap-3">
-          <label className="flex items-center gap-1 text-xs text-slate-600">
-            <input type="checkbox" checked={item.for_execution}
-                   onChange={e => set('for_execution', e.target.checked)} />
-            לביצוע
-          </label>
+          {!creationMode && (
+            <label className="flex items-center gap-1 text-xs text-slate-600">
+              <input type="checkbox" checked={item.for_execution}
+                     onChange={e => set('for_execution', e.target.checked)} />
+              לביצוע
+            </label>
+          )}
           <button onClick={onRemove} className="text-red-400 hover:text-red-600 text-lg leading-none">×</button>
         </div>
       </div>
@@ -40,8 +49,13 @@ export default function CurtainCard({ item, index, onChange, onRemove, sewingTyp
         </Field>
 
         <Field label="רוחב (מ׳)" required>
-          <input className="input" type="number" min="0" step="0.01" dir="ltr" value={item.width_m}
-                 onChange={e => set('width_m', e.target.value)} />
+          <input
+            className={`input ${widthInvalid ? 'border-red-400 focus:border-red-500 focus:ring-red-200' : ''}`}
+            type="number" min={MIN_ITEM_WIDTH_M} max={MAX_ITEM_WIDTH_M} step="0.01" dir="ltr"
+            value={item.width_m} aria-invalid={widthInvalid}
+            onChange={e => set('width_m', e.target.value)}
+          />
+          {widthInvalid && <div className="mt-1 text-xs text-red-600">הרוחב חייב להיות בין 0.30 ל־10.00 מטר.</div>}
         </Field>
 
         <Field label="גובה/ים (מ׳)" required>
@@ -73,24 +87,44 @@ export default function CurtainCard({ item, index, onChange, onRemove, sewingTyp
                  placeholder="שם הבד / קוד" />
         </Field>
 
-        <Field label="סטטוס">
-          <select className="input" value={item.item_status}
-                  onChange={e => set('item_status', e.target.value as CurtainItem['item_status'])}>
-            {ITEM_STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
-          </select>
-        </Field>
+        {!creationMode && (
+          <Field label="סטטוס">
+            <select className="input" value={item.item_status}
+                    onChange={e => set('item_status', e.target.value as CurtainItem['item_status'])}>
+              {ITEM_STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+            </select>
+          </Field>
+        )}
 
         <Field label="עלות (₪)" required>
           <input className="input font-bold" type="number" min="0" dir="ltr" value={item.price}
                  onChange={e => set('price', e.target.value)} />
         </Field>
 
-        <div className="col-span-2 sm:col-span-3 flex items-center gap-4">
-          <label className="flex items-center gap-1 text-xs text-slate-600">
-            <input type="checkbox" checked={item.is_split}
-                   onChange={e => set('is_split', e.target.checked)} />
-            חצוי (נפתח מהאמצע)
-          </label>
+        <div className="col-span-2 sm:col-span-3">
+          <div className="mb-1 text-xs font-medium text-slate-600">פתיחת הווילון</div>
+          <div className="inline-flex w-full max-w-xs rounded-lg border border-slate-300 bg-slate-50 p-1" role="group" aria-label="פתיחת הווילון">
+            <button
+              type="button"
+              aria-pressed={!item.is_split}
+              onClick={() => set('is_split', false)}
+              className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                !item.is_split ? 'bg-[#2743C7] text-white shadow-sm' : 'text-slate-600 hover:bg-white'
+              }`}
+            >
+              לא חצוי
+            </button>
+            <button
+              type="button"
+              aria-pressed={item.is_split}
+              onClick={() => set('is_split', true)}
+              className={`flex-1 rounded-md px-3 py-2 text-sm font-medium transition-colors ${
+                item.is_split ? 'bg-[#2743C7] text-white shadow-sm' : 'text-slate-600 hover:bg-white'
+              }`}
+            >
+              חצוי
+            </button>
+          </div>
         </div>
 
         <Field label="הערות" className="col-span-2 sm:col-span-3">
