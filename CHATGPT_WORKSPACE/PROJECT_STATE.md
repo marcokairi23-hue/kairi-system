@@ -9,7 +9,7 @@ This file records verified current KAIRI SYSTEM state. Update it only from repos
 - Active development branch: `main`
 - Normal Sprint strategy: MAIN-ONLY
 - Sprint 0 baseline: `5b105e7bb60cd56928b5a650591f990182208611`, verified equal to `origin/main` before work
-- Current phase: Sprint 1 New Order + Payment Gate implementation prepared; stopped at the production migration approval gate
+- Current phase: Sprint 1 New Order + Payment Gate preparation is committed; Run 1.2 is awaiting commit review and production migration approval
 - Authoritative workflow: `CHATGPT_WORKSPACE/WORKFLOW_V1.md`
 - Task queue/checklist: `CHATGPT_WORKSPACE/TASKS.md`
 - Decision record: `CHATGPT_WORKSPACE/DECISIONS.md`
@@ -30,8 +30,9 @@ Historical branches `codex/kairi-development` and `codex/order-page-layout` rema
 
 ## Sprint 1 migration-ready state
 
+- Preparation commit `be4178b` exists on `main` and has been pushed to `origin/main`.
 - New-order routes are exactly Cash, Check, Credit Card, Bank Transfer, and Quote; `pay_later` is removed from new-order creation without rewriting historical data.
-- Cash/Check require a positive deposit and create a `received` payment.
+- Cash/Check require a positive deposit, start in non-operational `draft`, create a `received` payment, and move to `ready` only after that insert succeeds.
 - Credit Card/Bank Transfer require and preserve a positive requested deposit, create a `pending` payment, and keep the order in `pending_payment`.
 - Quote creates no payment and keeps all items outside execution.
 - All application payment totals now count only `received` payments.
@@ -39,7 +40,7 @@ Historical branches `codex/kairi-development` and `codex/order-page-layout` rema
 - Migration `0015_payment_gate_v1.sql` adds the payment lifecycle, conservative historical backfill, server timestamps, ownership-scoped payment RLS, atomic confirmation/rejection RPCs, and database payment-gate guards.
 - `npm run build` passes with the existing large-bundle advisory.
 - The migration has not been applied to production and no live data has been changed.
-- Runtime use-case verification is pending migration approval and application.
+- End-to-end payment verification is not complete and remains pending migration approval and application.
 
 ## Verified contract gaps
 

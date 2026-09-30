@@ -166,7 +166,8 @@ export default function NewOrder() {
       // יצירת הזמנה
       const { data: order, error: oe } = await supabase.from('orders').insert({
         is_quote: isQuote,
-        status: isQuote ? 'quote' : entersExecution ? 'ready' : 'pending_payment',
+        // Cash/Check stay non-operational until their received payment is stored.
+        status: isQuote ? 'quote' : entersExecution ? 'draft' : 'pending_payment',
         customer_id: cust.id,
         agent_id: profile!.id,
         customer_name_snapshot: f.customer_name,
@@ -281,9 +282,19 @@ export default function NewOrder() {
         if (paymentError) throw paymentError
       }
 
+      // Release Cash/Check only after the received payment insert succeeded.
+      if (entersExecution) {
+        const { error: releaseError } = await supabase
+          .from('orders')
+          .update({ status: 'ready' })
+          .eq('id', order.id)
+        if (releaseError) throw releaseError
+      }
+
       // היסטוריה
       await supabase.from('order_status_history').insert({
         order_id: order.id,
+        from_status: entersExecution ? 'draft' : null,
         to_status: isQuote ? 'quote' : entersExecution ? 'ready' : 'pending_payment',
         changed_by: profile!.id,
         note: isQuote

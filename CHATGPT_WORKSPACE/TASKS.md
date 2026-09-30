@@ -3,7 +3,13 @@
 ## ACTIVE
 
 - Review and explicitly approve `supabase/migrations/0015_payment_gate_v1.sql` for production application.
-- Sprint 1 is stopped at the migration safety gate; do not commit or push yet.
+- Review Sprint 1 Run 1.2 changes; do not commit, push, or apply the migration in this run.
+
+## SPRINT 1 RUN 1.2
+
+[x] Cash/Check orders remain non-operational until the received payment insert succeeds
+[x] `CHATGPT_WORKSPACE/TEMP_ANS.md` supervisor report added
+[x] Workspace state synchronized with the preparation commit and migration/test facts
 
 ## NEXT
 
@@ -60,6 +66,8 @@
 [x] npm run build passes
 [x] Full diff reviewed
 [x] No unrelated files changed
+[x] Sprint 1 preparation commit `be4178b` exists on main
+[x] Sprint 1 preparation commit pushed to origin/main
 [ ] Production migration explicitly approved
 [ ] Production migration applied successfully
 [ ] Cash use case verified
@@ -69,9 +77,9 @@
 [ ] Quote use case verified
 [ ] Balance verified with pending + received payments
 [ ] Final working tree reviewed
-[ ] Sprint checkpoint committed on main
-[ ] main pushed to origin/main
-[ ] HEAD == origin/main after push
+[ ] Final Sprint checkpoint committed on main
+[ ] Final Sprint checkpoint pushed to origin/main
+[ ] HEAD == origin/main after final push
 
 ## SPRINT 0 CHECKLIST
 
