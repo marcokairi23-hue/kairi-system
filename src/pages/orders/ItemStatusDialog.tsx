@@ -4,6 +4,7 @@ import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/auth'
 import {
   ITEM_STATUS_LABELS, ITEM_STATUS_COLORS, ITEM_STATUS_ORDER, SHADING_LABELS,
+  resolveAuthoritativeItemRoute,
 } from '../../lib/statusHelpers'
 import { printWorkOrder } from '../items/printWork'
 
@@ -16,6 +17,9 @@ export interface DialogItem {
   heights_m: number[]
   item_status: string
   for_execution: boolean
+  production_route?: 'internal' | 'external' | null
+  routing_state?: string | null
+  routing_owner?: string | null
   // שדות נוספים — נדרשים רק לשם הדפסת דוח עבודה (printWorkOrder), לא לתצוגת הדיאלוג עצמה
   sewing_type?: string | null
   hem_cm?: number | null
@@ -46,7 +50,10 @@ export default function ItemStatusDialog({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const active = items.filter(i => i.item_status !== 'cancelled')
+  const active = items.filter(i =>
+    i.for_execution &&
+    i.item_status !== 'cancelled' &&
+    resolveAuthoritativeItemRoute(i.routing_state, i.routing_owner, i.production_route) !== null)
   const allSelected = active.length > 0 && selected.size === active.length
 
   const toggle = (id: string) => {

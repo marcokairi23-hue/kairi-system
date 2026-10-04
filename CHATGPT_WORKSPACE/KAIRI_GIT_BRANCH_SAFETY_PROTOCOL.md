@@ -2,11 +2,11 @@
 
 ## Authoritative normal workflow: MAIN-ONLY
 
-By explicit human decision on 2026-09-30, approved KAIRI SYSTEM Sprint work is performed directly on `main`. No Sprint branch is created unless the human explicitly requests a different Git strategy.
+By explicit human decision, approved KAIRI SYSTEM Sprint work is performed directly on `main`. Sprint branches are not used.
 
 Normal Sprint lifecycle:
 
-`FETCH → VERIFY MAIN → WORK → TEST → DIFF → CHECKLIST → COMMIT → PUSH → SUPERVISOR REVIEW → NEXT SPRINT`
+`FETCH → VERIFY MAIN → WORK → TEST → DIFF → CHECKLIST → COMMIT → REQUEST PUSH APPROVAL → PUSH → SUPERVISOR REVIEW → NEXT SPRINT`
 
 1. **FETCH** — Update remote references with `git fetch origin`.
 2. **VERIFY MAIN** — Confirm branch, commit identity, working-tree state, and absence of an active Git operation.
@@ -15,9 +15,10 @@ Normal Sprint lifecycle:
 5. **DIFF** — Review all changed and untracked files for scope, secrets, and accidental edits.
 6. **CHECKLIST** — Complete every Sprint checkbox and update `CHATGPT_WORKSPACE`.
 7. **COMMIT** — Create one clear Sprint checkpoint commit only after all required checks pass.
-8. **PUSH** — Push `main` to `origin/main` without force so GitHub and the supervisor remain synchronized.
-9. **SUPERVISOR REVIEW** — Report the checkpoint commit, validation evidence, risks, and open decisions.
-10. **NEXT SPRINT** — Do not begin until directed by the human.
+8. **REQUEST PUSH APPROVAL** — Report the commit and ask the human for explicit push approval.
+9. **PUSH** — Only after approval, push `main` to `origin/main` without force.
+10. **SUPERVISOR REVIEW** — Report the checkpoint commit, validation evidence, risks, and open decisions.
+11. **NEXT SPRINT** — Do not begin until directed by the human.
 
 ## Mandatory preflight before every Sprint
 
@@ -54,7 +55,7 @@ A Sprint may be committed and pushed only when:
 - only intended Sprint files changed; and
 - `CHATGPT_WORKSPACE` records the final verified state.
 
-Each completed Sprint ends with one clear checkpoint commit. After verifying that commit, push `main` to `origin/main`, then refresh the remote ref and verify local `HEAD == origin/main`.
+Each completed Sprint ends with one clear checkpoint commit on `main`. After verifying that commit, request explicit human approval before pushing. Only after approval, push `main` to `origin/main`, refresh the remote ref, and verify local `HEAD == origin/main`.
 
 Never:
 

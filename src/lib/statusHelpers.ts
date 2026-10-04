@@ -138,6 +138,27 @@ export function resolveItemRoute(
   return getItemRoute(family)
 }
 
+// Sprint 2: routing_state and routing_owner are the authoritative initial gate.
+// Historical progressed items retain their proven legacy route, while unpaid
+// or outside-execution items have no operational route even if family is known.
+export function resolveAuthoritativeItemRoute(
+  routingState: string | null | undefined,
+  routingOwner: string | null | undefined,
+  productionRoute: 'internal' | 'external' | null | undefined,
+): ItemRoute | null {
+  if (routingState === 'awaiting_cut' && routingOwner === 'CUTTER' && productionRoute === 'internal') {
+    return 'cutter'
+  }
+  if (routingState === 'awaiting_supplier_order' && routingOwner === 'OFFICE_SUPPLIER' && productionRoute === 'external') {
+    return 'office'
+  }
+  if (routingState === 'legacy_routed') {
+    if (productionRoute === 'internal') return 'cutter'
+    if (productionRoute === 'external') return 'office'
+  }
+  return null
+}
+
 // ============================================================
 // חישובי התקדמות
 // ============================================================

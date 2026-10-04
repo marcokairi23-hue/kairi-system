@@ -15,6 +15,7 @@ import { uploadOrderPdf } from '../../lib/uploadOrderPdf'
 import {
   ORDER_STATUS_LABELS, ORDER_STATUS_COLORS, ORDER_STATUS_NEXT,
   ITEM_STATUS_LABELS, ITEM_STATUS_COLORS, SHADING_LABELS, calcProgress,
+  ACTIVE_ORDER_STATUSES, resolveAuthoritativeItemRoute,
 } from '../../lib/statusHelpers'
 
 interface OrderItem {
@@ -35,6 +36,10 @@ interface OrderItem {
   price: number
   for_execution: boolean
   item_status: string
+  production_route?: 'internal' | 'external' | null
+  roman_internal_fabric_cut?: boolean
+  routing_state?: string
+  routing_owner?: string | null
   notes?: string
 }
 
@@ -82,6 +87,7 @@ export default function OrderDetail() {
   const [agentSignatureImgUrl, setAgentSignatureImgUrl] = useState<string | null>(null)
   const [agentSignatureDataUrl, setAgentSignatureDataUrl] = useState<string | null>(null)
   const [updatingStatus, setUpdatingStatus] = useState(false)
+  const [statusError, setStatusError] = useState<string | null>(null)
   const [showCancelConfirm, setShowCancelConfirm] = useState(false)
   const [tab, setTab] = useState<'details' | 'activity'>('details')
   const [sharingPdf, setSharingPdf] = useState(false)
@@ -154,6 +160,14 @@ export default function OrderDetail() {
   const shadings = (order.order_items ?? []).filter(i => i.family === 'shading')
 
   const nextStatus = ORDER_STATUS_NEXT[order.status]
+  const executableItems = (order.order_items ?? [])
+    .filter(item => item.for_execution && item.item_status !== 'cancelled')
+  const canExecute = ACTIVE_ORDER_STATUSES.includes(order.status)
+    && (order.payments ?? []).some(payment => payment.payment_status === 'received')
+    && executableItems.length > 0
+    && executableItems.every(item => resolveAuthoritativeItemRoute(
+      item.routing_state, item.routing_owner, item.production_route,
+    ) !== null)
   const prog = calcProgress(order.order_items ?? [])
 
   const form = buildFormFromOrder(order)
@@ -162,7 +176,14 @@ export default function OrderDetail() {
   const advanceStatus = async () => {
     if (!nextStatus) return
     setUpdatingStatus(true)
-    await supabase.from('orders').update({ status: nextStatus }).eq('id', id)
+    setStatusError(null)
+    const { error: updateError } = await supabase
+      .from('orders').update({ status: nextStatus }).eq('id', id)
+    if (updateError) {
+      setStatusError('לא ניתן לקדם את ההזמנה: ' + updateError.message)
+      setUpdatingStatus(false)
+      return
+    }
     await supabase.from('order_status_history').insert({
       order_id: id,
       from_status: order.status,
@@ -175,7 +196,7 @@ export default function OrderDetail() {
   }
 
   const assignInstaller = async (name: string) => {
-    if (!name) return
+    if (!name || !canExecute) return
     await supabase.from('orders').update({ installer_name: name }).eq('id', id)
     setShowInstallerSuggestion(true)
     await load()
@@ -188,7 +209,14 @@ export default function OrderDetail() {
 
   const reopenCase = async () => {
     setUpdatingStatus(true)
-    await supabase.from('orders').update({ status: 'ready_for_install' }).eq('id', id)
+    setStatusError(null)
+    const { error: updateError } = await supabase
+      .from('orders').update({ status: 'ready_for_install' }).eq('id', id)
+    if (updateError) {
+      setStatusError('לא ניתן לפתוח טיפול מחדש: ' + updateError.message)
+      setUpdatingStatus(false)
+      return
+    }
     await supabase.from('order_status_history').insert({
       order_id: id,
       from_status: order.status,
@@ -203,7 +231,14 @@ export default function OrderDetail() {
 
   const cancelOrder = async () => {
     setUpdatingStatus(true)
-    await supabase.from('orders').update({ status: 'cancelled' }).eq('id', id)
+    setStatusError(null)
+    const { error: updateError } = await supabase
+      .from('orders').update({ status: 'cancelled' }).eq('id', id)
+    if (updateError) {
+      setStatusError('לא ניתן לבטל את ההזמנה: ' + updateError.message)
+      setUpdatingStatus(false)
+      return
+    }
     await supabase.from('order_status_history').insert({
       order_id: id,
       from_status: order.status,
@@ -358,9 +393,11 @@ export default function OrderDetail() {
         >
           🖨️ הדפס ללקוח
         </button>
-        <button className="btn-ghost text-sm" onClick={() => printOrder(form, orderNum, false)}>
-          🔧 הוראות עבודה
-        </button>
+        {canExecute && (
+          <button className="btn-ghost text-sm" onClick={() => printOrder(form, orderNum, false)}>
+            🔧 הוראות עבודה
+          </button>
+        )}
         <button className="btn-ghost text-sm" onClick={sendWhatsApp}>
           💬 שלח ב-WhatsApp
         </button>
@@ -369,6 +406,7 @@ export default function OrderDetail() {
         </button>
       </div>
 
+      {statusError && <div className="card p-3 mb-3 text-sm text-red-700">{statusError}</div>}
       {/* עדכון סטטוס */}
       {order.status !== 'completed' && order.status !== 'cancelled' && (
         <div className="card p-3 mb-3 flex items-center justify-between gap-3">
@@ -378,7 +416,7 @@ export default function OrderDetail() {
           <div className="flex gap-2">
             {order.status === 'pending_payment' ? (
               <span className="text-xs text-amber-700">נדרש אישור משרד</span>
-            ) : order.status === 'ready_for_install' ? (
+            ) : order.status === 'ready_for_install' && canExecute ? (
               <select
                 className="input text-sm py-1.5"
                 value={order.installer_name ?? ''}
@@ -387,7 +425,7 @@ export default function OrderDetail() {
                 <option value="">שיוך מתקין...</option>
                 {installers.map(name => <option key={name} value={name}>{name}</option>)}
               </select>
-            ) : nextStatus && (
+            ) : nextStatus && (order.status === 'quote' || canExecute) && (
               <button className="btn-primary text-sm py-1.5" disabled={updatingStatus} onClick={advanceStatus}>
                 {updatingStatus ? '...' : `← ${ORDER_STATUS_LABELS[nextStatus]}`}
               </button>
@@ -631,6 +669,12 @@ export default function OrderDetail() {
         </div>
       )}
 
+      {(order.order_items ?? []).some(item => item.routing_state === 'legacy_unverified') && (
+        <div className="card p-3 mb-3 text-sm text-amber-800 bg-amber-50 border border-amber-200">
+          פריטים ותיקים בהזמנה זו דורשים בדיקת תשלום ידנית לפני המשך ביצוע.
+        </div>
+      )}
+
       {/* וילונות */}
       {curtains.length > 0 && (
         <div className="card mb-3 overflow-hidden">
@@ -691,6 +735,7 @@ export default function OrderDetail() {
                   {item.mount_type && <span>התקנה: {item.mount_type}</span>}
                   {item.mechanism_side && <span>צד: {item.mechanism_side}</span>}
                   {item.color_fabric_text && <span>צבע: {item.color_fabric_text}</span>}
+                  {item.roman_internal_fabric_cut && <span>בד קאירי — גזירה פנימית</span>}
                 </div>
                 {item.notes && <div className="text-slate-400 text-xs mt-1">{item.notes}</div>}
               </div>

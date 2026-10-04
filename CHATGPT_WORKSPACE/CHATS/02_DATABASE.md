@@ -12,7 +12,7 @@ Before starting work, read `../PROJECT_CONTEXT.md`, `../WORK_RULES.md`, `../KAIR
 
 ## Current context
 
-Versioned SQL is under `supabase/migrations/`. Sprint 1 adds the unapplied migration `0015_payment_gate_v1.sql` after the existing `0014` chain.
+Versioned SQL is under `supabase/migrations/`. Sprint 1 migration `0015_payment_gate_v1.sql` was applied and verified in production. Sprint 2 migration `0016_initial_item_routing_v1.sql` was pushed for review at `06d2d9e` and has not been applied.
 
 Migration `0015` prepares:
 
@@ -27,12 +27,13 @@ Migration `0015` prepares:
 - an order trigger requiring pending-payment exit through the confirmation RPC; and
 - an item trigger preventing operational item advancement before payment approval.
 
-## Safety gate
+## Sprint 2 safety gate
 
-- The migration file may be reviewed and edited, but it has not been applied to production.
-- Production data has not changed.
+- `0016` has not been applied to production.
+- Static review found that `0016` checks `roman` while migration 0011 and the current form persist `רומי`; the Roman exception is therefore broken in the reviewed SQL.
+- Existing in-progress items are backfilled into initial awaiting states based only on route; review this data impact before application.
 - Local SQL execution is unavailable because neither `psql` nor the Supabase CLI is installed; static review and application build pass.
-- Rollback after production traffic is not a simple down migration because payment lifecycle data and events may exist; use a reviewed forward correction or maintenance-window rollback plan.
+- Rollback after production traffic is not a simple down migration; use a reviewed forward correction or maintenance-window rollback plan.
 
 ## Known schema risk
 
@@ -40,4 +41,4 @@ The older committed migration chain still does not fully declare every productio
 
 ## Next action
 
-Human review and explicit approval before applying `0015` to the live Supabase project.
+Approval to resume Sprint 2 correction/UI work, followed by review and separate explicit approval before applying the corrected `0016` to the exact Supabase project.

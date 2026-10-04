@@ -3,7 +3,7 @@ import { useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/auth'
 import {
-  ITEM_STATUS_LABELS, ITEM_ROUTE_LABELS, resolveItemRoute, nextItemStatus,
+  ITEM_STATUS_LABELS, ITEM_ROUTE_LABELS, resolveAuthoritativeItemRoute, nextItemStatus,
   dateColumnForTransition, ACTIVE_ORDER_STATUSES, INTERNAL_ITEM_TRACK, EXTERNAL_ITEM_TRACK,
 } from '../../lib/statusHelpers'
 import { printWorkOrder } from './printWork'
@@ -25,6 +25,8 @@ interface Item {
   mechanism_side: string | null
   color_fabric_text: string | null
   production_route: 'internal' | 'external' | null
+  routing_state: string | null
+  routing_owner: string | null
   assigned_worker: string | null
   item_status: string
   for_execution: boolean
@@ -98,7 +100,8 @@ export default function ProductionBoard() {
       i.for_execution &&
       i.item_status !== 'cancelled' &&
       i.item_status !== 'installed' &&
-      ACTIVE_ORDER_STATUSES.includes(i.orders?.status ?? ''))
+      ACTIVE_ORDER_STATUSES.includes(i.orders?.status ?? '') &&
+      resolveAuthoritativeItemRoute(i.routing_state, i.routing_owner, i.production_route) !== null)
 
     setItems(active)
     setErr(null)
@@ -183,11 +186,13 @@ export default function ProductionBoard() {
     setBusy(true)
     const ids = Array.from(selected)
     const affectedOrderIds = new Set<string>()
+    let failure: string | null = null
 
     for (const id of ids) {
       const item = items.find(i => i.id === id)
       if (!item) continue
-      const route = resolveItemRoute(item.production_route, item.family)
+      const route = resolveAuthoritativeItemRoute(item.routing_state, item.routing_owner, item.production_route)
+      if (!route) continue
       const next = nextItemStatus(route, item.item_status)
       if (!next) continue
 
@@ -195,7 +200,12 @@ export default function ProductionBoard() {
       const updates: Record<string, unknown> = { item_status: next }
       if (dateColumn) updates[dateColumn] = new Date().toISOString()
 
-      await supabase.from('order_items').update(updates).eq('id', id)
+      const { error: updateError } = await supabase
+        .from('order_items').update(updates).eq('id', id)
+      if (updateError) {
+        failure = 'לא ניתן לקדם פריט: ' + updateError.message
+        break
+      }
       await supabase.from('order_status_history').insert({
         order_id: item.order_id,
         order_item_id: id,
@@ -209,6 +219,7 @@ export default function ProductionBoard() {
 
     setSelected(new Set())
     await load()
+    if (failure) setErr(failure)
     setBusy(false)
   }
 
@@ -216,9 +227,11 @@ export default function ProductionBoard() {
     if (!workerId) return
     setBusy(true)
     const ids = Array.from(selected)
-    await supabase.from('order_items').update({ assigned_worker: workerId }).in('id', ids)
+    const { error: assignError } = await supabase
+      .from('order_items').update({ assigned_worker: workerId }).in('id', ids)
     setAssignWorker('')
     await load()
+    if (assignError) setErr('לא ניתן לשייך עובד: ' + assignError.message)
     setBusy(false)
   }
 
@@ -229,7 +242,8 @@ export default function ProductionBoard() {
 
   // קידום פריט בודד בלחיצה על כפתור הפעולה בשורה
   const advanceOne = async (item: Item) => {
-    const route = resolveItemRoute(item.production_route, item.family)
+    const route = resolveAuthoritativeItemRoute(item.routing_state, item.routing_owner, item.production_route)
+    if (!route) return
     const next = nextItemStatus(route, item.item_status)
     if (!next) return
     setBusy(true)
@@ -238,7 +252,13 @@ export default function ProductionBoard() {
     const updates: Record<string, unknown> = { item_status: next }
     if (dateColumn) updates[dateColumn] = new Date().toISOString()
 
-    await supabase.from('order_items').update(updates).eq('id', item.id)
+    const { error: updateError } = await supabase
+      .from('order_items').update(updates).eq('id', item.id)
+    if (updateError) {
+      setErr('לא ניתן לקדם את הפריט: ' + updateError.message)
+      setBusy(false)
+      return
+    }
     await supabase.from('order_status_history').insert({
       order_id: item.order_id,
       order_item_id: item.id,
@@ -327,7 +347,7 @@ export default function ProductionBoard() {
                 {/* שורות פריטים */}
                 <div className="divide-y">
                   {g.items.map(i => {
-                    const route = resolveItemRoute(i.production_route, i.family)
+                    const route = resolveAuthoritativeItemRoute(i.routing_state, i.routing_owner, i.production_route)!
                     const track = route === 'cutter' ? INTERNAL_ITEM_TRACK : EXTERNAL_ITEM_TRACK
                     const stepIdx = track.indexOf(i.item_status as never)
                     const next = nextItemStatus(route, i.item_status)

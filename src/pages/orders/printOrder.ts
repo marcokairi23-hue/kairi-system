@@ -215,6 +215,8 @@ export function buildFormFromOrder(order: {
     id: string
     family: string
     subtype?: string | null
+    roman_internal_fabric_cut?: boolean
+    routing_state?: string | null
     location: string
     width_m: number
     heights_m: number[]
@@ -263,6 +265,8 @@ export function buildFormFromOrder(order: {
       db_id: i.id,
       family: 'shading' as const,
       subtype: i.subtype ?? 'זברה',
+      roman_internal_fabric_cut: i.roman_internal_fabric_cut ?? false,
+      routing_state: i.routing_state ?? undefined,
       location: i.location,
       width_m: String(i.width_m),
       heights_m: i.heights_m.join(','),

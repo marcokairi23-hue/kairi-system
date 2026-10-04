@@ -83,8 +83,8 @@ The contract requires separate payment, order, item, owner, permission, timestam
 ## Git workflow
 
 - Normal approved Sprint work is MAIN-ONLY and occurs directly on `main`.
-- No Sprint branch is created unless the human explicitly requests another strategy.
-- Every Sprint follows `FETCH → VERIFY MAIN → WORK → TEST → DIFF → CHECKLIST → COMMIT → PUSH → SUPERVISOR REVIEW`.
+- Sprint branches are not used.
+- Every Sprint follows `FETCH → VERIFY MAIN → WORK → TEST → DIFF → CHECKLIST → COMMIT → REQUEST PUSH APPROVAL → PUSH → SUPERVISOR REVIEW`.
 - Historical `codex/kairi-development` and `codex/order-page-layout` refs may still exist, but they are not the active development location and must not be presented as current state.
 
 ## Verified repository baseline

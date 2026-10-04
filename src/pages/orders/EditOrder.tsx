@@ -205,6 +205,7 @@ export default function EditOrder() {
           family: 'shading',
           production_route: 'external',
           subtype: item.subtype,
+          roman_internal_fabric_cut: item.roman_internal_fabric_cut,
           location: item.location,
           width_m: parseFloat(item.width_m) || 0,
           heights_m: item.heights_m.split(',').map(h => parseFloat(h.trim())).filter(h => !isNaN(h)),

@@ -145,3 +145,83 @@ RISKS:
 Current 0016 must not be applied as reviewed.
 NEXT:
 Correct SQL and UI on `main`; perform technical checks before the migration gate.
+
+## SPRINT 2 — IMPLEMENTATION CHECKPOINT
+
+STATUS:
+Local SQL/UI corrections on `main`; Sprint 2 incomplete; 0016 not applied.
+CHECKBOXES:
+Roman flag, per-item routing, legacy classification and operational filtering implemented locally.
+FILES:
+0016, order forms/details, item queues, routing helper, TASKS.md and PROJECT_STATE.md.
+TESTS:
+`npm run build` PASS; `git diff --check` PASS. No user journeys or migration execution.
+RESULT:
+31 active executable legacy items lack received payment and require reconciliation.
+DECISIONS:
+User journeys deferred until all Sprint code/migration changes are complete.
+BLOCKERS:
+Separate approval required before applying corrected 0016; runtime tests remain.
+RISKS:
+Deploy UI only with compatible schema; historical unverified items stay out of execution.
+NEXT:
+Review migration/data impact, then request explicit application approval.
+
+## SPRINT 2 — PRODUCTION DATA CLEANUP
+
+STATUS:
+User-approved cleanup completed; 0016 not applied; Sprint 2 incomplete.
+SCOPE:
+Orders created before 2026-09-01 00:00 Israel time only.
+DELETED:
+50 orders, 94 items, 38 payments, 503 history rows; no other linked rows found.
+VERIFIED:
+0 older orders/linked rows remain; all 21 later orders remain.
+REMAINING RISK:
+3 active items in retained orders #9061–#9063 lack received payment; 2 progressed.
+NEXT:
+Review corrected 0016 and preserved September exceptions before migration approval.
+
+## SPRINT 2 — PRE-APPLICATION REVIEW
+
+STATUS:
+Corrected 0016 remains local and unapplied; Sprint 2 incomplete.
+CHECKS:
+Reviewed workflow, order/payment writes, legacy backfill, Roman flag and route guards.
+The order guard reads payment/items with fixed search_path and definer privileges.
+RESULT:
+Closed nullable route/owner CHECK gap; cancellation remains non-operational.
+New item inserts now require `item_status=new` and no assigned worker, even before payment.
+Active unpaid/unrouted orders cannot advance; operational UI fails closed on rejected writes.
+TESTS:
+`npm run build` PASS; `git diff --check` PASS. Runtime journeys deferred.
+RISKS:
+Orders #9061–#9063 remain without received payment; 2 items already progressed.
+NEXT:
+Explicit review and separate approval required before applying corrected 0016.
+Local 0016 SHA256: `7B473CD1DD7A530047F5812AC292CFC27446F53589977624CB8682721BB42569`.
+
+## SPRINT 2 — APPLICATION GATE
+
+STATUS: Approved exact 0016 for production; not applied.
+CHECKS: SHA256 unchanged; no DELETE/TRUNCATE; production `routing_state` absent.
+BASELINE: 21 orders, 25 items, 14 payments, 45 history rows.
+BLOCKER: Browser policy blocked exact local-file transfer; manual SQL execution needed.
+AUDIT: Prior approved cleanup deleted 38 payments and 503 history rows; no further cleanup.
+NEXT: Receive execution result, verify schema/backfill once; no rerun, commit or push.
+
+## 2026-10-01 — Approved 15-checkbox continuation checkpoint
+
+STATUS: SAFETY_GATE; 7/15 verified (six Git checks plus exact-revision migration approval); 8 pending. Full plan now has 214 unchecked boxes.
+GIT: main; fetch succeeded; HEAD = origin/main = c0b02769b030887b9dc16d79029b3f55b724655c; no merge/rebase metadata. Existing 21 modified files and untracked plan/presentation artifacts preserved; presentation work excluded from this Sprint.
+APPROVAL: User authorized the proposed Sprint 2 continuation and TEST records in production. Existing exact 0016 SHA256 remains 7B473CD1DD7A530047F5812AC292CFC27446F53589977624CB8682721BB42569. Push/deployment remain separate gates.
+TESTS: npm run build PASS (bundle-size warning); git diff --check PASS. Reviewed local routing SQL and UI diff; no live routing/permissions/E2E PASS claimed.
+PRODUCTION: Dashboard identified kairi-os / ipcnyqkcvbvzmasmzaur / main PRODUCTION. It shows No backups. Local kairi_backup.sql is empty (0 bytes). Browser control disconnected while entering a read-only query; Run was not invoked and no query result obtained. Migration application state has NOT been reverified this turn.
+FILES: Added supabase/checks/0016_preflight_readonly.sql; updated plan checkboxes and checkpoint documentation only. No application or migration SQL changes this turn.
+NEXT: Restore browser access and establish a usable backup/recovery path; run read-only preflight, then continue the existing approved exact migration only if absent. No automatic rerun. Complete runtime cases and review before Sprint closure.
+TEST_IDS: None created this turn. No migration, commit, push, or deployment performed.
+## 2026-10-01 — Live preflight after browser recovery
+
+Browser connection restored. Executed a read-only SQL SELECT in production project ipcnyqkcvbvzmasmzaur: routing_present=false; orders=21; items=25; payments=14; history=45. This confirms the routing column is still absent; 0016 was not executed this turn.
+The Database Backups page explicitly states that the Free Plan does not include project backups. Local kairi_backup.sql remains 0 bytes. Direct connection UI requires an existing database password; local environment files currently expose only app anon configuration, with no database connection string available.
+Pending user input: configure DATABASE_URL privately in ignored .env.local for a manual backup, or identify an existing current backup. No subscription upgrade or credential reset performed. Existing migration approval remains valid for the unchanged SHA256. No additional checkboxes marked complete: 7/15 verified, 214 open overall.

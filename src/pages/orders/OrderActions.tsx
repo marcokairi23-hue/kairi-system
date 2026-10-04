@@ -2,7 +2,10 @@ import { useNavigate } from 'react-router-dom'
 import { Printer, Wrench, MessageCircle, Pencil, Wallet, ClipboardList, ArrowLeft } from 'lucide-react'
 import { printOrder, buildFormFromOrder } from './printOrder'
 import { getSignatureDataUrl } from '../../lib/uploadSignature'
-import { ORDER_STATUS_NEXT, ORDER_STATUS_LABELS, SHADING_LABELS, fmt } from '../../lib/statusHelpers'
+import {
+  ACTIVE_ORDER_STATUSES, ORDER_STATUS_NEXT, ORDER_STATUS_LABELS,
+  SHADING_LABELS, fmt, resolveAuthoritativeItemRoute,
+} from '../../lib/statusHelpers'
 import { PaymentRecord, sumReceivedPayments } from '../../lib/payments'
 
 export interface ActionOrder {
@@ -41,6 +44,9 @@ export interface ActionOrder {
     price: number
     for_execution: boolean
     item_status: string
+    production_route?: 'internal' | 'external' | null
+    routing_state?: string | null
+    routing_owner?: string | null
     notes?: string
   }>
   payments?: PaymentRecord[]
@@ -63,6 +69,15 @@ export default function OrderActions({
   const paid = sumReceivedPayments(order.payments ?? [])
   const remaining = order.final_total - paid
   const nextStatus = ORDER_STATUS_NEXT[order.status]
+  const executableItems = (order.order_items ?? [])
+    .filter(i => i.for_execution && i.item_status !== 'cancelled')
+  const canExecute = ACTIVE_ORDER_STATUSES.includes(order.status)
+    && (order.payments ?? []).some(p => p.payment_status === 'received')
+    && executableItems.length > 0
+    && executableItems.every(i => resolveAuthoritativeItemRoute(
+      i.routing_state, i.routing_owner, i.production_route,
+    ) !== null)
+  const canAdvance = order.status === 'quote' || canExecute
 
   const stop = (e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation() }
 
@@ -119,9 +134,11 @@ ${paid > 0 ? `שולם: ${fmt(paid)}\nנשאר: ${fmt(remaining)}` : ''}
         <Printer className={icon} />{!compact && <span className="text-xs">הדפס</span>}
       </button>
 
-      <button className={btn} title="הוראות עבודה" onClick={e => doPrint(e, false)}>
-        <Wrench className={icon} />{!compact && <span className="text-xs">עבודה</span>}
-      </button>
+      {canExecute && (
+        <button className={btn} title="הוראות עבודה" onClick={e => doPrint(e, false)}>
+          <Wrench className={icon} />{!compact && <span className="text-xs">עבודה</span>}
+        </button>
+      )}
 
       <button className={btn} title="שלח ב-WhatsApp" onClick={doWhatsApp}>
         <MessageCircle className={icon} />{!compact && <span className="text-xs">שלח</span>}
@@ -140,14 +157,14 @@ ${paid > 0 ? `שולם: ${fmt(paid)}\nנשאר: ${fmt(remaining)}` : ''}
       )}
 
       {/* פעולות קידום ופריטים מושבתות ב-pending_payment; רק אישור התשלום הסמכותי משחרר את ההזמנה. */}
-      {nextStatus && order.status !== 'pending_payment' && (
+      {nextStatus && canExecute && (
         <button className={btn} title="פריטים בהזמנה"
                 onClick={e => { stop(e); onItemStatus() }}>
           <ClipboardList className={icon} />{!compact && <span className="text-xs">פריטים</span>}
         </button>
       )}
 
-      {nextStatus && order.status !== 'pending_payment' && (
+      {nextStatus && canAdvance && (
         <button className={btn}
                 title={`קדם ל: ${ORDER_STATUS_LABELS[nextStatus]}`}
                 onClick={e => { stop(e); onAdvance() }}>

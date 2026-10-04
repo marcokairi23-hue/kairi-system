@@ -5,7 +5,7 @@ import { useAuth } from '../../lib/auth'
 import BulkActionBar from './BulkActionBar'
 import {
   ITEM_STATUS_LABELS, ITEM_STATUS_COLORS, ITEM_STATUS_ORDER, SHADING_LABELS,
-  ITEM_ROUTE_LABELS, ItemRoute, resolveItemRoute, nextItemStatus, ACTIVE_ORDER_STATUSES,
+  ITEM_ROUTE_LABELS, ItemRoute, resolveAuthoritativeItemRoute, nextItemStatus, ACTIVE_ORDER_STATUSES,
 } from '../../lib/statusHelpers'
 import { printWorkOrder } from './printWork'
 import SyncOrderDialog from '../orders/SyncOrderDialog'
@@ -29,6 +29,8 @@ interface Item {
   mechanism_side: string | null
   color_fabric_text: string | null
   production_route: 'internal' | 'external' | null
+  routing_state: string | null
+  routing_owner: string | null
   assigned_worker: string | null
   price: number
   for_execution: boolean
@@ -85,6 +87,10 @@ export default function ItemsList() {
     count: number
   }>>([])
 
+  const itemRoute = (item: Item) => resolveAuthoritativeItemRoute(
+    item.routing_state, item.routing_owner, item.production_route,
+  )
+
   const load = async () => {
     setLoading(true)
     const { data, error } = await supabase
@@ -101,7 +107,9 @@ export default function ItemsList() {
     // הזמנה עדיין לא פעילה (draft/quote/pending_payment/cancelled) — הפריט לא אמור להופיע
     // כאן עד שההזמנה יצאה מגבייה בפועל (DEFECTS_MAP #20).
     const active = ((data ?? []) as Item[]).filter(i =>
-      ACTIVE_ORDER_STATUSES.includes(i.orders?.status ?? ''))
+      i.for_execution &&
+      ACTIVE_ORDER_STATUSES.includes(i.orders?.status ?? '') &&
+      itemRoute(i) !== null)
 
     // מיון: הזמנות חדשות קודם (לפי מספר הזמנה יורד)
     const sorted = active.sort((a, b) => {
@@ -126,7 +134,7 @@ export default function ItemsList() {
     return items.filter(i => {
       if (i.item_status === 'cancelled' && activeTab !== 'all') return false
       if (tab.statuses.length && !tab.statuses.includes(i.item_status)) return false
-      if (activeRoute !== 'all' && resolveItemRoute(i.production_route, i.family) !== activeRoute) return false
+      if (activeRoute !== 'all' && itemRoute(i) !== activeRoute) return false
       if (search) {
         const q = search.toLowerCase()
         return (
@@ -243,7 +251,14 @@ export default function ItemsList() {
 
   const applyStatus = async (status: string) => {
     const ids = Array.from(selected)
-    await supabase.from('order_items').update({ item_status: status }).in('id', ids)
+    if (ids.length === 0) return
+    setErr(null)
+    const { error: itemError } = await supabase
+      .from('order_items').update({ item_status: status }).in('id', ids)
+    if (itemError) {
+      setErr('לא ניתן לעדכן את הפריטים: ' + itemError.message)
+      return
+    }
 
     // רישום היסטוריה
     const rows = ids.map(itemId => {
@@ -274,9 +289,14 @@ export default function ItemsList() {
     const current = syncQueue[0]
     if (!current) return
 
-    await supabase.from('orders')
+    const { error: orderError } = await supabase.from('orders')
       .update({ status: current.suggested })
       .eq('id', current.orderId)
+    if (orderError) {
+      setErr('לא ניתן לקדם את ההזמנה: ' + orderError.message)
+      setSyncQueue(q => q.slice(1))
+      return
+    }
 
     await supabase.from('order_status_history').insert({
       order_id: current.orderId,
@@ -388,7 +408,10 @@ export default function ItemsList() {
                 <span className="opacity-60 font-normal">{g.items.length}</span>
               </div>
               <div className="divide-y">
-                {g.items.map(i => (
+                {g.items.map(i => {
+                  const route = itemRoute(i)
+                  if (!route) return null
+                  return (
                   <div key={i.id}
                        className={`flex items-center gap-2 p-3 hover:bg-slate-50 ${
                          selected.has(i.id) ? 'bg-brand-light' : ''
@@ -414,11 +437,11 @@ export default function ItemsList() {
                       <div className="text-xs text-slate-600 mt-0.5 flex items-center gap-1">
                         <span>{itemTypeLabel(i)} — {i.location}</span>
                         <span className={`px-1.5 py-0.5 rounded text-[10px] ${
-                          resolveItemRoute(i.production_route, i.family) === 'cutter'
+                          route === 'cutter'
                             ? 'bg-purple-100 text-purple-700'
                             : 'bg-blue-100 text-blue-700'
                         }`}>
-                          {ITEM_ROUTE_LABELS[resolveItemRoute(i.production_route, i.family)]}
+                          {ITEM_ROUTE_LABELS[route]}
                         </span>
                       </div>
 
@@ -436,7 +459,7 @@ export default function ItemsList() {
                       }`}>
                         {ITEM_STATUS_LABELS[i.item_status] ?? i.item_status}
                       </span>
-                      {nextItemStatus(resolveItemRoute(i.production_route, i.family), i.item_status) && (
+                      {nextItemStatus(route, i.item_status) && (
                         <button
                           className="text-xs text-brand hover:underline"
                           onClick={() => setAdvanceItem(i)}
@@ -446,7 +469,8 @@ export default function ItemsList() {
                       )}
                     </div>
                   </div>
-                ))}
+                  )
+                })}
               </div>
             </div>
           ))}

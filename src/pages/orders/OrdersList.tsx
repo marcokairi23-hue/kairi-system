@@ -49,6 +49,7 @@ export default function OrdersList() {
   const [searchParams, setSearchParams] = useSearchParams()
   const [orders, setOrders] = useState<Order[]>([])
   const [loading, setLoading] = useState(true)
+  const [actionError, setActionError] = useState<string | null>(null)
   const [search, setSearch] = useState('')
 
   const activeTab = searchParams.get('tab') || 'all'
@@ -150,8 +151,15 @@ export default function OrdersList() {
     syncItemsToo: boolean,
     itemStatus: string | null
   ) => {
+    setActionError(null)
     // עדכון ההזמנה
-    await supabase.from('orders').update({ status: newStatus }).eq('id', order.id)
+    const { error: orderError } = await supabase
+      .from('orders').update({ status: newStatus }).eq('id', order.id)
+    if (orderError) {
+      setActionError('לא ניתן לקדם את ההזמנה: ' + orderError.message)
+      setSyncItems(null)
+      return
+    }
     await supabase.from('order_status_history').insert({
       order_id: order.id,
       from_status: order.status,
@@ -167,9 +175,16 @@ export default function OrdersList() {
         .map(i => i.id)
 
       if (ids.length) {
-        await supabase.from('order_items')
+        const { error: itemError } = await supabase.from('order_items')
           .update({ item_status: itemStatus })
           .in('id', ids)
+
+        if (itemError) {
+          setActionError('ההזמנה קודמה, אך עדכון הפריטים נכשל: ' + itemError.message)
+          setSyncItems(null)
+          await load()
+          return
+        }
 
         await supabase.from('order_status_history').insert(
           ids.map(itemId => ({
@@ -217,9 +232,15 @@ export default function OrdersList() {
 
   const confirmSyncOrder = async () => {
     if (!syncOrder) return
-    await supabase.from('orders')
+    setActionError(null)
+    const { error: orderError } = await supabase.from('orders')
       .update({ status: syncOrder.suggested })
       .eq('id', syncOrder.order.id)
+    if (orderError) {
+      setActionError('לא ניתן לקדם את ההזמנה: ' + orderError.message)
+      setSyncOrder(null)
+      return
+    }
 
     await supabase.from('order_status_history').insert({
       order_id: syncOrder.order.id,
@@ -408,6 +429,7 @@ export default function OrdersList() {
         )}
       </div>
 
+      {actionError && <div className="card p-3 mb-4 text-sm text-red-700">{actionError}</div>}
       {loading && <div className="text-slate-500">טוען הזמנות...</div>}
 
       {!loading && filtered.length === 0 && (

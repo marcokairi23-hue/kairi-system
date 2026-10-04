@@ -5,6 +5,7 @@ export type PaymentRoute = 'cash' | 'check' | 'credit_card' | 'bank_transfer' | 
 // טקסט חופשי (לא enum) — ניתן לעריכה מעמוד ההגדרות, ראו migration 0011.
 export type ShadingSubtype = string
 export type ItemStatus = 'new' | 'cut' | 'sewing' | 'ready' | 'installed' | 'cancelled'
+export const isRomanShadingSubtype = (subtype: string) => subtype === 'רומי' || subtype === 'roman'
 
 export interface CurtainItem {
   id: string
@@ -29,6 +30,8 @@ export interface ShadingItem {
   db_id?: string          // id אמיתי ב-order_items (undefined = פריט חדש שטרם נשמר)
   family: 'shading'
   subtype: ShadingSubtype
+  roman_internal_fabric_cut: boolean
+  routing_state?: string
   location: string
   width_m: string
   heights_m: string
@@ -133,6 +136,7 @@ export function newShadingItem(): ShadingItem {
     id: uid(),
     family: 'shading',
     subtype: 'זברה',
+    roman_internal_fabric_cut: false,
     location: '',
     width_m: '',
     heights_m: '',

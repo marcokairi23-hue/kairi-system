@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/auth'
 import {
-  ITEM_STATUS_LABELS, resolveItemRoute, nextItemStatus, dateColumnForTransition,
+  ITEM_STATUS_LABELS, resolveAuthoritativeItemRoute, nextItemStatus, dateColumnForTransition,
 } from '../../lib/statusHelpers'
 
 interface AdvanceDialogItem {
@@ -11,6 +11,8 @@ interface AdvanceDialogItem {
   family: string
   location: string
   production_route: 'internal' | 'external' | null
+  routing_state: string | null
+  routing_owner: string | null
   item_status: string
   assigned_worker: string | null
 }
@@ -32,6 +34,7 @@ export default function ItemAdvanceDialog({ open, item, onDone, onClose }: ItemA
   const [workers, setWorkers] = useState<Worker[]>([])
   const [selectedWorker, setSelectedWorker] = useState<string>('')
   const [saving, setSaving] = useState(false)
+  const [error, setError] = useState<string | null>(null)
 
   useEffect(() => {
     if (open) {
@@ -43,19 +46,26 @@ export default function ItemAdvanceDialog({ open, item, onDone, onClose }: ItemA
 
   if (!open || !item) return null
 
-  const route = resolveItemRoute(item.production_route, item.family)
-  const next = nextItemStatus(route, item.item_status)
+  const route = resolveAuthoritativeItemRoute(item.routing_state, item.routing_owner, item.production_route)
+  const next = route ? nextItemStatus(route, item.item_status) : null
 
   const confirm = async () => {
     if (!next) return
     setSaving(true)
+    setError(null)
 
     const dateColumn = dateColumnForTransition(item.item_status, next)
     const updates: Record<string, unknown> = { item_status: next }
     if (dateColumn) updates[dateColumn] = new Date().toISOString()
     if (selectedWorker) updates.assigned_worker = selectedWorker
 
-    await supabase.from('order_items').update(updates).eq('id', item.id)
+    const { error: updateError } = await supabase
+      .from('order_items').update(updates).eq('id', item.id)
+    if (updateError) {
+      setError('לא ניתן לקדם את הפריט: ' + updateError.message)
+      setSaving(false)
+      return
+    }
 
     await supabase.from('order_status_history').insert({
       order_id: item.order_id,
@@ -86,6 +96,7 @@ export default function ItemAdvanceDialog({ open, item, onDone, onClose }: ItemA
         )}
 
         <label className="block text-xs font-medium text-slate-600 mb-1">שיוך עובד אחראי (אופציונלי)</label>
+        {error && <p className="text-sm text-red-600 mb-2">{error}</p>}
         <select className="input mb-4" value={selectedWorker} onChange={e => setSelectedWorker(e.target.value)}>
           <option value="">ללא שיוך</option>
           {workers.map(w => <option key={w.id} value={w.id}>{w.full_name}</option>)}

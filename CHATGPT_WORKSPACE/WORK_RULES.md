@@ -5,7 +5,7 @@
   2. `WORK_RULES.md`
   3. `KAIRI_GIT_BRANCH_SAFETY_PROTOCOL.md`
   4. Its own `CHATS/<domain>.md` file
-- All approved KAIRI SYSTEM Sprint implementation work is performed directly on `main`, unless the human explicitly requests another Git strategy.
+- All approved KAIRI SYSTEM Sprint implementation work is performed directly on `main`; Sprint branches are not used.
 - Before each Sprint, run the full Git preflight in `KAIRI_GIT_BRANCH_SAFETY_PROTOCOL.md`: status, branch, fetch, `HEAD == origin/main`, no merge/rebase, and expected working-tree state.
 - During a Sprint, make only Sprint-scoped changes and do not perform unrelated cleanup.
 - Read `PROJECT_CONTEXT.md` before starting work.
@@ -22,9 +22,9 @@
 - Required tests/builds must pass and the full diff must be reviewed.
 - `CHATGPT_WORKSPACE` must be updated to the final verified state.
 - An incomplete Sprint must not be committed or pushed.
-- A completed Sprint ends with one clear checkpoint commit on `main` and a non-force push to `origin/main`.
+- A completed Sprint ends with one clear checkpoint commit on `main`. A non-force push to `origin/main` requires explicit human approval after the commit.
 - After pushing, verify local `HEAD == origin/main` and report the checkpoint for supervisor review.
 
 ## Standard task lifecycle
 
-`REVIEW → PLAN → APPROVAL → CHANGE → TEST → DIFF → CHECKLIST → COMMIT → PUSH → SUPERVISOR REVIEW`
+`REVIEW → PLAN → APPROVAL → CHANGE → TEST → DIFF → CHECKLIST → COMMIT → REQUEST PUSH APPROVAL → PUSH → SUPERVISOR REVIEW`
