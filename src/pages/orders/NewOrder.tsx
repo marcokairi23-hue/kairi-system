@@ -1,4 +1,5 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
+import { orderCreationPayload, requireCreatedOrder } from './createOrder'
 import { useNavigate } from 'react-router-dom'
 import { Blinds, CreditCard, Package, PanelsTopLeft, PenLine, Plus, Send, UserRound } from 'lucide-react'
 import { useAuth } from '../../lib/auth'
@@ -24,6 +25,8 @@ export default function NewOrder() {
   const { profile } = useAuth()
   const navigate = useNavigate()
   const [form, setForm] = useState<OrderForm>(emptyForm(profile?.full_name ?? ''))
+  const saveLock = useRef(false)
+  const requestId = useRef(crypto.randomUUID())
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [showDialog, setShowDialog] = useState(false)
@@ -136,6 +139,7 @@ export default function NewOrder() {
 
   // --- שמירה ---
   const save = async (route: PaymentRoute) => {
+    if (saveLock.current || createdOrderId) return
     const isQuote = route === 'quote'
     const entersExecution = route === 'cash' || route === 'check'
     const f: OrderForm = isQuote ? {
@@ -150,50 +154,31 @@ export default function NewOrder() {
       setError(validationError)
       return
     }
-    const fItemsTotal = calcItemsTotal(f)
-    const fTotalWidth = calcTotalWidth(f)
+    const deposit = Number(f.paid_on_account)
+    if (!isQuote && (!Number.isFinite(deposit) || deposit <= 0)) {
+      setError('יש להזין סכום מקדמה גדול מאפס.')
+      return
+    }
+    saveLock.current = true
     setBusy(true); setError(null)
     try {
-      // יצירת לקוח
-      const { data: cust, error: ce } = await supabase.from('customers').insert({
-        full_name: f.customer_name,
-        phone: f.phone,
-        address: f.address,
-        city: f.city!.trim(),
-      }).select('id').single()
-      if (ce) throw ce
-
-      // יצירת הזמנה
-      const { data: order, error: oe } = await supabase.from('orders').insert({
-        is_quote: isQuote,
-        // Cash/Check stay non-operational until their received payment is stored.
-        status: isQuote ? 'quote' : entersExecution ? 'draft' : 'pending_payment',
-        customer_id: cust.id,
-        agent_id: profile!.id,
-        customer_name_snapshot: f.customer_name,
-        phone_snapshot: f.phone,
-        address_snapshot: f.address,
-        items_total: fItemsTotal,
-        installation_fee: parseFloat(f.installation_fee) || 0,
-        discount: parseFloat(f.discount) || 0,
-        final_total: parseFloat(f.final_total) || 0,
-        total_width_m: fTotalWidth,
-        send_email: f.send_email || null,
-        signature_name: f.signature_name || null,
-        notes: f.notes || null,
-      }).select('id').single()
-      if (oe) throw oe
-
-      // הקצאת מספר הזמנה
-      const { data: allocatedNumber } = await supabase
-        .rpc('allocate_order_number', { p_order_id: order.id })
+      const { data, error: creationError } = await supabase.rpc('create_order_v1', {
+        p_request_id: requestId.current,
+        p_payload: orderCreationPayload(f, route),
+      })
+      if (creationError) throw creationError
+      const order = requireCreatedOrder(data)
+      const allocatedNumber = order.order_number
+      setCreatedOrderId(order.id)
 
       // העלאת חתימות (לא חוסמת את שמירת ההזמנה בכישלון)
       let signatureUploadFailed = false
+      let pdfUploadFailed = false
       if (f.signatureDataUrl) {
         try {
           const path = await uploadSignature(order.id, f.signatureDataUrl)
-          await supabase.from('orders').update({ signature_url: path }).eq('id', order.id)
+          const { error } = await supabase.from('orders').update({ signature_url: path }).eq('id', order.id)
+          if (error) throw error
         } catch (sigErr) {
           console.error('שגיאה בהעלאת חתימת לקוח:', sigErr)
           signatureUploadFailed = true
@@ -202,59 +187,12 @@ export default function NewOrder() {
       if (f.agentSignatureDataUrl) {
         try {
           const path = await uploadSignature(order.id, f.agentSignatureDataUrl, 'agent')
-          await supabase.from('orders').update({ agent_signature_url: path }).eq('id', order.id)
+          const { error } = await supabase.from('orders').update({ agent_signature_url: path }).eq('id', order.id)
+          if (error) throw error
         } catch (sigErr) {
           console.error('שגיאה בהעלאת חתימת סוכן:', sigErr)
           signatureUploadFailed = true
         }
-      }
-
-      // פריטי וילונות
-      if (f.curtain_items.length > 0) {
-        await supabase.from('order_items').insert(
-          f.curtain_items.map((item, idx) => ({
-            order_id: order.id,
-            family: 'curtain',
-            production_route: 'internal',
-            location: item.location,
-            width_m: parseFloat(item.width_m) || 0,
-            heights_m: item.heights_m.split(',').map(h => parseFloat(h.trim())).filter(h => !isNaN(h)),
-            sewing_type: item.sewing_type,
-            hem_cm: parseFloat(item.hem_cm) || 10,
-            shtaif_cm: parseFloat(item.shtaif_cm) || 10,
-            is_split: item.is_split,
-            fabric_text: item.fabric_text || null,
-            price: parseFloat(item.price) || 0,
-            for_execution: item.for_execution,
-            item_status: item.item_status,
-            notes: item.notes || null,
-            sort_order: idx,
-          }))
-        )
-      }
-
-      // פריטי הצללה
-      if (f.shading_items.length > 0) {
-        await supabase.from('order_items').insert(
-          f.shading_items.map((item, idx) => ({
-            order_id: order.id,
-            family: 'shading',
-            production_route: 'external',
-            subtype: item.subtype,
-            roman_internal_fabric_cut: item.roman_internal_fabric_cut,
-            location: item.location,
-            width_m: parseFloat(item.width_m) || 0,
-            heights_m: item.heights_m.split(',').map(h => parseFloat(h.trim())).filter(h => !isNaN(h)),
-            mount_type: item.mount_type,
-            mechanism_side: item.mechanism_side,
-            color_fabric_text: item.color_fabric_text || null,
-            price: parseFloat(item.price) || 0,
-            for_execution: item.for_execution,
-            item_status: item.item_status,
-            notes: item.notes || null,
-            sort_order: idx,
-          }))
-        )
       }
 
       // הפקת PDF והעלאה ל-Storage (לא חוסמת את שמירת ההזמנה בכישלון)
@@ -263,64 +201,30 @@ export default function NewOrder() {
         const pdfBlob = await generateOrderPdf(documentForm, allocatedNumber ?? 'טיוטה', true)
         const pdfUrl = await uploadOrderPdf(order.id, pdfBlob)
         const pdfUrlOriginal = await uploadOrderPdf(order.id, pdfBlob, true)
-        await supabase.from('orders').update({ pdf_url: pdfUrl, pdf_url_original: pdfUrlOriginal }).eq('id', order.id)
+        const { error } = await supabase.from('orders').update({ pdf_url: pdfUrl, pdf_url_original: pdfUrlOriginal }).eq('id', order.id)
+        if (error) throw error
       } catch (pdfErr) {
         console.error('שגיאה בהפקת/העלאת PDF ההזמנה:', pdfErr)
+        pdfUploadFailed = true
       }
 
-      // תשלום ראשוני
-      if (!isQuote && f.paid_on_account && parseFloat(f.paid_on_account) > 0) {
-        const { error: paymentError } = await supabase.from('payments').insert({
-          order_id: order.id,
-          amount: parseFloat(f.paid_on_account),
-          method: f.payment_method || null,
-          payment_route: route,
-          payment_status: entersExecution ? 'received' : 'pending',
-          recorded_by: profile!.id,
-          received_by: entersExecution ? profile!.id : null,
-          paid_at: null,
-        })
-        if (paymentError) throw paymentError
-      }
-
-      // Release Cash/Check only after the received payment insert succeeded.
-      if (entersExecution) {
-        const { error: releaseError } = await supabase
-          .from('orders')
-          .update({ status: 'ready' })
-          .eq('id', order.id)
-        if (releaseError) throw releaseError
-      }
-
-      // היסטוריה
-      await supabase.from('order_status_history').insert({
-        order_id: order.id,
-        from_status: entersExecution ? 'draft' : null,
-        to_status: isQuote ? 'quote' : entersExecution ? 'ready' : 'pending_payment',
-        changed_by: profile!.id,
-        note: isQuote
-          ? 'הצעת מחיר נוצרה'
-          : entersExecution
-            ? 'הזמנה נוצרה והועברה לביצוע'
-            : 'הזמנה נוצרה והועברה לטיפול בגבייה',
-      })
-
-      if (signatureUploadFailed) {
+      if (signatureUploadFailed || pdfUploadFailed) {
         setCreatedOrderId(order.id)
-        setError('ההזמנה נשמרה אך אחת החתימות (או שתיהן) לא הועלתה. אפשר להשלים במסך עריכת ההזמנה.')
+        setError('ההזמנה נשמרה, אך שמירת חתימה או מסמך PDF נכשלה. אפשר להשלים במסך עריכת ההזמנה.')
         return
       }
 
       navigate('/orders')
     } catch (err: unknown) {
-      setError('שגיאה בשמירה: ' + (err instanceof Error ? err.message : JSON.stringify(err)))
+      setError('לא התקבל אישור שמירה. יש לנסות שוב באותו טופס עם אותם פרטים; אין לפתוח הזמנה נוספת. ' + (err instanceof Error ? err.message : JSON.stringify(err)))
     } finally {
+      saveLock.current = false
       setBusy(false)
     }
   }
 
   return (
-    <div className="pb-20">
+    <fieldset className="pb-20 min-w-0" disabled={busy}>
       <div className="flex items-center justify-between mb-4">
         <div>
           <h1 className="text-xl font-bold">הזמנה חדשה</h1>
@@ -669,6 +573,6 @@ export default function NewOrder() {
         onConfirm={confirmItemSelection}
         onClose={() => setItemSelectionOpen(false)}
       />
-    </div>
+    </fieldset>
   )
 }

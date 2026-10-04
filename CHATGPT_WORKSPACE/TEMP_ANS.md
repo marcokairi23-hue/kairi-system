@@ -225,3 +225,58 @@ TEST_IDS: None created this turn. No migration, commit, push, or deployment perf
 Browser connection restored. Executed a read-only SQL SELECT in production project ipcnyqkcvbvzmasmzaur: routing_present=false; orders=21; items=25; payments=14; history=45. This confirms the routing column is still absent; 0016 was not executed this turn.
 The Database Backups page explicitly states that the Free Plan does not include project backups. Local kairi_backup.sql remains 0 bytes. Direct connection UI requires an existing database password; local environment files currently expose only app anon configuration, with no database connection string available.
 Pending user input: configure DATABASE_URL privately in ignored .env.local for a manual backup, or identify an existing current backup. No subscription upgrade or credential reset performed. Existing migration approval remains valid for the unchanged SHA256. No additional checkboxes marked complete: 7/15 verified, 214 open overall.
+## Sprint 1 remaining implementation — local checkpoint
+
+Implemented three open items. Checklist: 40/203 marked, 163 open; Sprint 1: 23/23 implementation. SQL activation and production acceptance deferred to M1.
+
+TESTS: build PASS (existing bundle warning). scripts/test-sprint1.mjs PASS with temporary PGlite: strict received-only sums; payload excludes signatures and Roman flag; five routes; mixed items/accessories; retry without duplicates; changed-payload rejection; payment/item/accessory/no-execution rollback; audit failure rollback including counter; Admin/Sales allowed, Viewer/Office denied. Fixture supplies historically missing columns. No live Production or browser PASS claimed.
+
+LIMITATIONS: deploy only after create_order_v1 installation in M1. Retry identity lasts within the mounted form; offline/refresh draft recovery is outside this Sprint. Storage uploads remain post-transaction with visible warnings. Concurrent multi-session and actual Supabase/PostgREST acceptance remain M1 work. No migration/commit/push/deployment performed.
+
+## Current update — Part 1 / Sprint 2 locally verified
+
+Sprint 2 implementation: 16/16; full original checklist 56/203 marked and 147 open. No production completion claimed. All shading routes to Office, including Roman. Removed the obsolete Roman flag from form types, creation/editing, order details and print mapping. Revised 0016 has no Roman exception and includes atomic migration boundaries and backfill audit.
+
+Paid still-new legacy items route by family; progressed items with a conflicting historical route remain legacy_unverified without rewriting their work status. M1 must review these records and the exact backfill before application.
+
+Validation: npm run build PASS (existing bundle warning); scripts/test-sprint1.mjs <PGlite module> --routing PASS with five payment routes, Office confirmation for card/transfer, Sales denial, mixed item ownership, non-execution items, historical Roman backfill, per-item audit and isolated edits. Sprint 1 SQL now explicitly casts production_route to its database enum; fixture mirrors that enum. Tests use local PostgreSQL only, no Supabase/Production or browser verification claimed.
+
+M1: verify live production_route enum/schema, 0015 state, backup/recovery, corrected 0016 and atomic-creation draft. Approve/apply exact versions before compatible UI deployment. No migration, commit, push or deployment performed. Previous notes calling the current local 0016 stale are superseded; remote/previous copies remain unapproved.
+
+Next authorized part to discuss: Part 2 (Cutter work instructions). No Sprint 3 implementation was performed in this part.
+
+## Part 2 — local validation checkpoint
+
+## Current update — Part 2 locally implemented
+
+Sprint 3: 12/18 implementation items; total original checklist 66/203 marked, 137 open. User explicitly chose activation AFTER printing by a separate confirmation. Draft creation/printing does not lock items; activation revalidates the snapshot and atomically locks selected items and writes audit. Pending cut is represented by order_items.cut_instruction_id, leaving legacy item_status unchanged until Part 3.
+
+New scoped Cutter queue/UI and role draft, immutable instruction snapshots, server locks, same-instruction retry, popup failure handling and draft reopening are implemented. PostgreSQL/PGlite and mocked local-browser component tests passed. See TEMP_ANS.md for evidence and limitations. No Production changes, commit, push or deployment.
+
+M1 must commit sprint3_cutter_role.sql before sprint3_cut_instructions.sql, after corrected 0016. No users were assigned the new role. Complete Part 3 actual-meters confirmation before operational deployment; Part 2 intentionally provides no unlock/advance operation.
+
+
+TESTS: scripts/test-sprint1.mjs <temporary PGlite module> --cutting exercises Sprints 1/2 plus Cutter queue permissions, draft 2/3 selection, no early locks, idempotent preparation/activation, duplicate/mixed-order/invalid selections, immutable escaped print snapshots, competing drafts, pending reprint/advance/edit/delete/order-transition denial, audit count, untouched third item, stale snapshot rejection and full rollback on audit failure. Inactive Cutter denied; Office support allowed.
+
+BROWSER: scripts/test-cut-ui.mjs passed at 390x844 using actual React component with mocked auth/RPC and blocked external network. Covers popup blocking, selected-only print content, close/reopen draft, no activation on print/cancel, explicit activation, lost-response retry using the same instruction ID and pending-item exclusion. No real printer or live Supabase connection was used; multi-session PostgreSQL concurrency and real-device/production acceptance remain M1.
+
+FILES: pending Cutter-role and instruction SQL; CutterWork/cutInstructions; role/navigation integration; legacy print redirection for curtain instructions; generic advance suppression and pending indicators; SQL/browser regression scripts; checklist/state/decision updates. Part 3 actual meters/confirmation has NOT been implemented or marked complete.
+
+Final Part 2 checks: npm run build PASS (existing bundle-size advisory); git diff --check PASS. Draft queue excludes instructions whose items have since been locked elsewhere. No Production operation performed.
+## V1 UI COMPLETION PASS
+
+STATUS:
+UI implementation prepared for review; no backend completion is claimed.
+SCREENS UPDATED:
+Workflow UI: routing, Cutter, Office, receipt, readiness, pickup and installer; order installation/closure review; navigation.
+UI COMPLETED:
+10 requested areas prepared/preserved, including the existing payment UI. Missing backend actions remain visibly disabled.
+PENDING DB WORK:
+10 entries: PENDING_MIGRATIONS/UI_PASS_01 through UI_PASS_10. Existing SQL files were not modified.
+DEFERRED:
+Live operational acceptance and physical-printer verification, outside the requested UI-only scope.
+Existing Cutter browser fixture models the superseded RPC screen; untouched and not executed.
+BUILD:
+PASS (existing bundle-size warning); git diff --check PASS. No other validation run.
+NEXT:
+UI review, then separately authorized backend work. No commit or push.

@@ -34,6 +34,7 @@ interface Item {
   assigned_worker: string | null
   price: number
   for_execution: boolean
+  cut_instruction_id?: string | null
   item_status: string
   notes: string | null
   sort_order?: number
@@ -457,7 +458,7 @@ export default function ItemsList() {
                       <span className={`text-xs px-2 py-0.5 rounded-full ${
                         ITEM_STATUS_COLORS[i.item_status] ?? 'bg-slate-100'
                       }`}>
-                        {ITEM_STATUS_LABELS[i.item_status] ?? i.item_status}
+                        {i.cut_instruction_id ? 'ממתין לאישור גזירה' : ITEM_STATUS_LABELS[i.item_status] ?? i.item_status}
                       </span>
                       {nextItemStatus(route, i.item_status) && (
                         <button

@@ -76,6 +76,8 @@ export function nextItemStatus(
   route: 'cutter' | 'office',
   currentStatus: string
 ): string | null {
+  // New Cutter items advance only through actual-cut confirmation (Sprint 3).
+  if (route === 'cutter' && currentStatus === 'new') return null
   const track = route === 'cutter' ? INTERNAL_ITEM_TRACK : EXTERNAL_ITEM_TRACK
   const idx = track.indexOf(currentStatus as never)
   if (idx === -1 || idx === track.length - 1) return null

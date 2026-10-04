@@ -1,7 +1,6 @@
 import {
   ShadingItem, SHADING_SUBTYPES, MOUNT_TYPES, MECHANISM_SIDES, ITEM_STATUSES,
   MIN_ITEM_WIDTH_M, MAX_ITEM_WIDTH_M, isValidItemWidth,
-  isRomanShadingSubtype,
 } from './types'
 import { Field } from './FormFields'
 
@@ -19,7 +18,6 @@ export default function ShadingCard({
 }: Props) {
   const set = (k: keyof ShadingItem, v: unknown) => onChange({ ...item, [k]: v })
   const widthInvalid = item.width_m !== '' && !isValidItemWidth(item.width_m)
-  const roman = isRomanShadingSubtype(item.subtype)
   const routingLocked = Boolean(item.db_id && item.routing_state !== 'outside_execution')
 
   return (
@@ -47,25 +45,15 @@ export default function ShadingCard({
                   onChange={e => onChange({
                     ...item,
                     subtype: e.target.value,
-                    roman_internal_fabric_cut: isRomanShadingSubtype(e.target.value)
-                      ? item.roman_internal_fabric_cut : false,
                   })}>
             {subtypes.map(s => <option key={s} value={s}>{s}</option>)}
           </select>
         </Field>
 
-        {roman && (
-          <label className="col-span-2 sm:col-span-3 flex items-start gap-2 text-sm text-slate-700">
-            <input type="checkbox" className="mt-1" checked={item.roman_internal_fabric_cut}
-                   disabled={routingLocked}
-                   onChange={e => set('roman_internal_fabric_cut', e.target.checked)} />
-            <span>בד של קאירי הדורש גזירה פנימית — ניתוב לחותך לאחר אישור תשלום</span>
-          </label>
-        )}
 
         {routingLocked && (
           <div className="col-span-2 sm:col-span-3 text-xs text-slate-500">
-            מסלול הפריט כבר נקבע; שינוי סוג או חריג גזירה דורש טיפול מתועד.
+            מסלול הפריט כבר נקבע; שינוי סוג דורש טיפול מתועד.
           </div>
         )}
 

@@ -68,7 +68,7 @@ export default function OrderActions({
   const orderNum = order.order_number ?? 'טיוטה'
   const paid = sumReceivedPayments(order.payments ?? [])
   const remaining = order.final_total - paid
-  const nextStatus = ORDER_STATUS_NEXT[order.status]
+  const nextStatus = ORDER_STATUS_NEXT[order.status] === 'completed' ? undefined : ORDER_STATUS_NEXT[order.status]
   const executableItems = (order.order_items ?? [])
     .filter(i => i.for_execution && i.item_status !== 'cancelled')
   const canExecute = ACTIVE_ORDER_STATUSES.includes(order.status)

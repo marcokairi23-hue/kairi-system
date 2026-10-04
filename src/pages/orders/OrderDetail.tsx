@@ -1,3 +1,4 @@
+import InstallationReview from './InstallationReview'
 import { useEffect, useState } from 'react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
@@ -35,9 +36,9 @@ interface OrderItem {
   color_fabric_text?: string
   price: number
   for_execution: boolean
+  cut_instruction_id?: string | null
   item_status: string
   production_route?: 'internal' | 'external' | null
-  roman_internal_fabric_cut?: boolean
   routing_state?: string
   routing_owner?: string | null
   notes?: string
@@ -159,7 +160,7 @@ export default function OrderDetail() {
   const curtains = (order.order_items ?? []).filter(i => i.family === 'curtain')
   const shadings = (order.order_items ?? []).filter(i => i.family === 'shading')
 
-  const nextStatus = ORDER_STATUS_NEXT[order.status]
+  const nextStatus = ORDER_STATUS_NEXT[order.status] === 'completed' ? undefined : ORDER_STATUS_NEXT[order.status]
   const executableItems = (order.order_items ?? [])
     .filter(item => item.for_execution && item.item_status !== 'cancelled')
   const canExecute = ACTIVE_ORDER_STATUSES.includes(order.status)
@@ -462,7 +463,7 @@ export default function OrderDetail() {
 
       {order.status === 'picked_by_installer' && (
         <div className="card p-4 mb-3">
-          <div className="text-xs font-bold text-slate-500 mb-2">חתימות סיום התקנה</div>
+          <div className="text-xs font-bold text-slate-500 mb-2">חתימות סיום התקנה — שתי החתימות חובה לסגירה</div>
           <div className="grid grid-cols-2 gap-3">
             <div>
               <div className="text-sm mb-1">
@@ -505,33 +506,9 @@ export default function OrderDetail() {
         onClose={() => setInstallInstallerSigOpen(false)}
       />
 
-      {order.status === 'picked_by_installer'
-        && order.install_customer_signature_url
-        && order.install_installer_signature_url
-        && !showCompletedSuggestion && (
-        <div className="card p-4 mb-3">
-          <div className="text-sm font-medium mb-3">האם ההתקנה הושלמה בהצלחה?</div>
-          <div className="flex gap-2">
-            <button className="btn-primary flex-1" onClick={markInstallSuccess}>
-              ✅ כן, הושלמה
-            </button>
-            <button className="btn-ghost flex-1 text-red-500" onClick={() => setReopenConfirmOpen(true)}>
-              ⚠️ לא — פתיחת טיפול
-            </button>
-          </div>
-        </div>
-      )}
-
-      {showCompletedSuggestion && (
-        <div className="mb-3">
-          <StatusSuggestionBanner
-            orderId={id!}
-            currentStatus={order.status}
-            suggestedStatus="completed"
-            reason="ההתקנה הושלמה והיתרה נגבתה — לסמן את ההזמנה כהושלמה?"
-            onApplied={() => { setShowCompletedSuggestion(false); load() }}
-          />
-        </div>
+      {['picked_by_installer','completed'].includes(order.status) && (
+        <InstallationReview customerSigned={!!order.install_customer_signature_url}
+          installerSigned={!!order.install_installer_signature_url} completed={order.status==='completed'} />
       )}
 
       {reopenConfirmOpen && (
@@ -688,7 +665,7 @@ export default function OrderDetail() {
                     <span className={`text-xs px-2 py-0.5 rounded-full ${
                       ITEM_STATUS_COLORS[item.item_status] ?? 'bg-slate-100'
                     }`}>
-                      {ITEM_STATUS_LABELS[item.item_status] ?? item.item_status}
+                      {item.cut_instruction_id ? 'ממתין לאישור גזירה' : ITEM_STATUS_LABELS[item.item_status] ?? item.item_status}
                     </span>
                     <span className="font-bold text-brand">₪{item.price.toLocaleString()}</span>
                   </div>
@@ -735,7 +712,6 @@ export default function OrderDetail() {
                   {item.mount_type && <span>התקנה: {item.mount_type}</span>}
                   {item.mechanism_side && <span>צד: {item.mechanism_side}</span>}
                   {item.color_fabric_text && <span>צבע: {item.color_fabric_text}</span>}
-                  {item.roman_internal_fabric_cut && <span>בד קאירי — גזירה פנימית</span>}
                 </div>
                 {item.notes && <div className="text-slate-400 text-xs mt-1">{item.notes}</div>}
               </div>

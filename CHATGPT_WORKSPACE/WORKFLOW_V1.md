@@ -1,5 +1,11 @@
 # KAIRI SYSTEM — V1 Workflow Contract
 
+## Current precedence and execution update
+
+The user-supplied `KAIRI_SYSTEM_V1_SPRINTS_SOT.md` supersedes conflicting historical rules below: all shading, including every Roman curtain, routes to Office. No Roman-to-Cutter exception is approved in V1.
+
+The user deferred all production migrations to one separate consolidated sprint M1. Feature sprints may prepare and locally test SQL; application, production acceptance and dependent UI deployment remain M1 work. Sprint 1 atomic creation now requires the draft `create_order_v1` RPC; do not deploy that frontend before the RPC is installed and verified.
+
 **Status:** Authoritative product and implementation contract for V1
 
 **Approved scope:** Stable end-to-end replica of the existing operational workflow with minor improvements only
@@ -392,3 +398,7 @@ V1 entities and event links must permit these additions without encoding them no
 7. Choose canonical database codes and backward-compatible mapping from current order/item enums during the implementation migration.
 8. Reconcile the missing committed schema history for `production_route`, supplier/date fields, and extended item statuses before any new migration is designed.
 9. Decide whether cutter and installer become database roles or scoped permissions layered on another role; the V1 permission outcomes above are mandatory either way.
+
+## Part 2 print contract update
+
+Printing prepares a persisted draft, not an active cut instruction. Only explicit post-print confirmation changes selected items to CUT_CONFIRMATION_PENDING (represented by cut_instruction_id and the pending instruction). Pending items cannot be reprinted, advanced, edited, deleted or added to another active instruction. Drafts can be reopened; activation rejects stale snapshots and duplicate/conflicting selections. Actual meters and progression remain Part 3.

@@ -28,6 +28,7 @@ interface Item {
   routing_state: string | null
   routing_owner: string | null
   assigned_worker: string | null
+  cut_instruction_id?: string | null
   item_status: string
   for_execution: boolean
   notes: string | null
@@ -386,7 +387,7 @@ export default function ProductionBoard() {
                             ))}
                           </div>
                           <span className="text-xs font-bold" style={{ color: STAGE_COLOR[i.item_status] }}>
-                            {ITEM_STATUS_LABELS[i.item_status]}
+                            {i.cut_instruction_id ? 'ממתין לאישור גזירה' : ITEM_STATUS_LABELS[i.item_status]}
                           </span>
                         </div>
 

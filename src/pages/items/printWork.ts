@@ -24,6 +24,11 @@ interface WorkItem {
 // הדפסת הוראות עבודה לפריטים נבחרים (יכולים להיות מכמה הזמנות)
 export function printWorkOrder(items: WorkItem[]) {
   if (items.length === 0) return
+  // Curtain work instructions must go through persisted drafts and activation.
+  if (items.some(i => i.family === 'curtain')) {
+    window.location.assign('/cutting')
+    return
+  }
 
   const curtains = items.filter(i => i.family === 'curtain')
   const shadings = items.filter(i => i.family === 'shading')

@@ -15,6 +15,7 @@ export interface DialogItem {
   location: string
   width_m: number
   heights_m: number[]
+  cut_instruction_id?: string | null
   item_status: string
   for_execution: boolean
   production_route?: 'internal' | 'external' | null
@@ -51,6 +52,7 @@ export default function ItemStatusDialog({
   const [error, setError] = useState<string | null>(null)
 
   const active = items.filter(i =>
+    !i.cut_instruction_id && !(i.family === 'curtain' && i.routing_owner === 'CUTTER' && i.item_status === 'new') &&
     i.for_execution &&
     i.item_status !== 'cancelled' &&
     resolveAuthoritativeItemRoute(i.routing_state, i.routing_owner, i.production_route) !== null)
@@ -179,7 +181,7 @@ export default function ItemStatusDialog({
               <span className={`text-xs px-2 py-0.5 rounded-full shrink-0 ${
                 ITEM_STATUS_COLORS[item.item_status] ?? 'bg-slate-100'
               }`}>
-                {ITEM_STATUS_LABELS[item.item_status] ?? item.item_status}
+                {item.cut_instruction_id ? 'ממתין לאישור גזירה' : ITEM_STATUS_LABELS[item.item_status] ?? item.item_status}
               </span>
             </label>
           ))}

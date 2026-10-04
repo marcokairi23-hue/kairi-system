@@ -30,7 +30,6 @@ export interface ShadingItem {
   db_id?: string          // id אמיתי ב-order_items (undefined = פריט חדש שטרם נשמר)
   family: 'shading'
   subtype: ShadingSubtype
-  roman_internal_fabric_cut: boolean
   routing_state?: string
   location: string
   width_m: string
@@ -136,7 +135,6 @@ export function newShadingItem(): ShadingItem {
     id: uid(),
     family: 'shading',
     subtype: 'זברה',
-    roman_internal_fabric_cut: false,
     location: '',
     width_m: '',
     heights_m: '',

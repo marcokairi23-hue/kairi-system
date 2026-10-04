@@ -9,6 +9,8 @@ const navItems: NavItem[] = [
   { to: '/', label: 'ראשי', end: true, featureKey: 'dashboard' },
   { to: '/orders', label: 'הזמנות', featureKey: 'orders' },
   { to: '/items', label: 'פריטים', featureKey: 'items' },
+  { to: '/workflow', label: 'תפעול V1' },
+  { to: '/cutting', label: 'עבודות גזירה' },
   { to: '/production', label: 'לוח ייצור - בדיקה', featureKey: 'production' },
   { to: '/fabrics', label: 'בדים', featureKey: 'fabrics' },
   { to: '/activity', label: 'יומן פעילות', featureKey: 'activityLog' },
@@ -38,7 +40,9 @@ export default function Layout({ children }: { children: ReactNode }) {
         { to: '/screen-manager', label: 'ניהול מסכים', featureKey: 'screenManager' },
       ]
     : navItems
-  ).filter((item) => !item.featureKey || featureVisible[item.featureKey])
+  ).filter((item) => profile?.role === 'cutter' ? item.to === '/cutting' :
+    (item.to !== '/cutting' || ['admin','office'].includes(profile?.role ?? '')) &&
+    (!item.featureKey || featureVisible[item.featureKey]))
 
   return (
     <div className="min-h-screen flex flex-col">

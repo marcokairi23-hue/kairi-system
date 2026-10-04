@@ -1,5 +1,51 @@
 # Project State
 
+## V1 UI completion pass — current scope
+
+UI-only user contract supersedes sprint implementation for this pass. Ten requested UI areas are prepared/preserved: payment, routing, Cutter, Office, receipt, readiness, pickup, installer, installation evidence and closure. New WorkflowUI uses existing readable orders/items/payment data. Intended ownership is distinguished from persisted owner; no automatic transitions are simulated.
+
+CutterWork now presents UI-only drafts and does not call pending instruction RPCs. Unavailable confirmation/acceptance/closure actions are disabled. Photos are explicitly local previews only. Existing Sprint 1 UI is preserved. Ten concise backend entries are in PENDING_MIGRATIONS/UI_PASS_*.md. Earlier migration/test files are untouched by this pass.
+
+DEFERRED: Existing Cutter browser fixture still models the earlier RPC-based screen; not changed or executed.
+
+DEFERRED: Live operational acceptance and physical-printer verification are outside this UI-only contract. No network, Production, schema, RLS, migration or test-script work performed. Next: UI review, then separately authorized backend work. SOT checkboxes were not changed.
+
+
+## Current update — Part 2 locally implemented
+
+Sprint 3: 12/18 implementation items; total original checklist 66/203 marked, 137 open. User explicitly chose activation AFTER printing by a separate confirmation. Draft creation/printing does not lock items; activation revalidates the snapshot and atomically locks selected items and writes audit. Pending cut is represented by order_items.cut_instruction_id, leaving legacy item_status unchanged until Part 3.
+
+New scoped Cutter queue/UI and role draft, immutable instruction snapshots, server locks, same-instruction retry, popup failure handling and draft reopening are implemented. PostgreSQL/PGlite and mocked local-browser component tests passed. See TEMP_ANS.md for evidence and limitations. No Production changes, commit, push or deployment.
+
+M1 must commit sprint3_cutter_role.sql before sprint3_cut_instructions.sql, after corrected 0016. No users were assigned the new role. Complete Part 3 actual-meters confirmation before operational deployment; Part 2 intentionally provides no unlock/advance operation.
+
+
+## Current update — Part 1 / Sprint 2 locally verified
+
+Sprint 2 implementation: 16/16; full original checklist 56/203 marked and 147 open. No production completion claimed. All shading routes to Office, including Roman. Removed the obsolete Roman flag from form types, creation/editing, order details and print mapping. Revised 0016 has no Roman exception and includes atomic migration boundaries and backfill audit.
+
+Paid still-new legacy items route by family; progressed items with a conflicting historical route remain legacy_unverified without rewriting their work status. M1 must review these records and the exact backfill before application.
+
+Validation: npm run build PASS (existing bundle warning); scripts/test-sprint1.mjs <PGlite module> --routing PASS with five payment routes, Office confirmation for card/transfer, Sales denial, mixed item ownership, non-execution items, historical Roman backfill, per-item audit and isolated edits. Sprint 1 SQL now explicitly casts production_route to its database enum; fixture mirrors that enum. Tests use local PostgreSQL only, no Supabase/Production or browser verification claimed.
+
+M1: verify live production_route enum/schema, 0015 state, backup/recovery, corrected 0016 and atomic-creation draft. Approve/apply exact versions before compatible UI deployment. No migration, commit, push or deployment performed. Previous notes calling the current local 0016 stale are superseded; remote/previous copies remain unapproved.
+
+Next authorized part to discuss: Part 2 (Cutter work instructions). No Sprint 3 implementation was performed in this part.
+
+
+## Current override — Sprint 1 follow-up
+
+The updated KAIRI_SYSTEM_V1_SPRINTS_SOT.md supersedes the older full plan and Roman exception. All shading, including every Roman curtain, goes to Office.
+
+User directed completion of three remaining Sprint 1 implementation items and deferred ALL production migrations to separate sprint M1. Work is local on main; no migration, commit, push or deployment was performed.
+
+Implemented: create_order_v1 transaction for customer/order/items/accessories/payment/history and numbering; same-request retry returns the same order; NewOrder uses only this RPC and checks attachment errors; balances count received only. SQL is in supabase/pending_migrations/sprint1_atomic_order_creation.sql, outside automatic migration discovery.
+
+Local PostgreSQL/PGlite tests and build pass. Fixtures explicitly supply orders.notes and order_items.production_route missing from committed schema history. This is not live schema or browser verification.
+
+DEPLOYMENT DEPENDENCY: NewOrder requires create_order_v1. Do not deploy before M1 installs and verifies the RPC. 0016 remains stale; earlier approval does not authorize its Roman exception. Sprint 1 is implementation-ready, not production-complete. Older conflicting state entries below are historical.
+
+
 ## Purpose
 
 This file records verified current KAIRI SYSTEM state. Update it only from repository evidence or explicit project decisions.

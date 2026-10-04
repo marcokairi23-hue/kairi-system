@@ -3,6 +3,8 @@ import { Routes, Route, Navigate } from 'react-router-dom'
 import { useAuth } from './lib/auth'
 import { useFeature } from './lib/featureFlags'
 import Layout from './components/Layout'
+import CutterWork from './pages/items/CutterWork'
+import WorkflowUI from './pages/items/WorkflowUI'
 import Login from './pages/Login'
 import Dashboard from './pages/Dashboard'
 import FabricsList from './pages/fabrics/FabricsList'
@@ -27,7 +29,7 @@ function FeatureRoute({ featureKey, children }: { featureKey: string; children: 
 }
 
 export default function App() {
-  const { session, loading } = useAuth()
+  const { session, loading, profile } = useAuth()
 
   if (loading) {
     return (
@@ -38,6 +40,8 @@ export default function App() {
   }
 
   if (!session) return <Login />
+
+  if (profile?.role === 'cutter') return <Layout><CutterWork /></Layout>
 
   return (
     <Layout>
@@ -51,6 +55,8 @@ export default function App() {
         <Route path="/orders/:id" element={<FeatureRoute featureKey="orderDetail"><OrderDetail /></FeatureRoute>} />
         <Route path="/orders/:id/edit" element={<FeatureRoute featureKey="orderDetail"><EditOrder /></FeatureRoute>} />
         <Route path="/items" element={<FeatureRoute featureKey="items"><ItemsList /></FeatureRoute>} />
+        <Route path="/workflow" element={<WorkflowUI />} />
+        <Route path="/cutting" element={<CutterWork />} />
         <Route path="/production" element={<FeatureRoute featureKey="production"><ProductionBoard /></FeatureRoute>} />
         <Route path="/activity" element={<FeatureRoute featureKey="activityLog"><ActivityLog /></FeatureRoute>} />
         <Route path="/users" element={<FeatureRoute featureKey="users"><UsersList /></FeatureRoute>} />

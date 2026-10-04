@@ -16,3 +16,11 @@
 | 2026-09-30 | Require an immutable structured event for every operational transition. | Current client-side history inserts can diverge from state changes and lack required context. | Future writes must atomically couple state and append-only events with action, actor role, timestamp, and structured metadata. |
 | 2026-09-30 | Defer cross-order fabric grouping, fabric-roll intelligence, cutting/waste optimization, sewing-queue refinement, supplier automation, and advanced feature-flag activation. | V1 prioritizes a stable replica with minimum complexity. | Data structures must preserve extension paths, but these capabilities are not V1 Sprint 0 implementation scope. |
 | 2026-09-30 | `pay_later` is outside V1 and is not available when creating a new order. | The approved payment gate requires Cash, Check, Credit Card, Bank Transfer, or Quote with explicit deposit/request behavior. | New-order types and options exclude `pay_later`; historical records are not rewritten. |
+
+## User decision — Sprint 1 follow-up
+
+All required migrations are deferred to separate consolidated sprint M1. Local implementation and SQL preparation are authorized; production application is not. Business Sprint 1 numbering stays unchanged. The updated V1 SOT supersedes the old Roman exception: all shading routes to Office.
+
+## Part 2 — explicit print/activation decision
+
+User selected explicit confirmation AFTER printing. Printing/canceling a draft does not activate it or lock items. The operator activates the saved instruction separately; the server revalidates payment, eligible IDs and the exact printed snapshot. Documents state they are drafts until activated. Role Cutter is implemented as a new database role in pending M1 SQL; no existing user assignment is changed.

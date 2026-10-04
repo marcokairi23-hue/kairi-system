@@ -1,4 +1,6 @@
+begin;
 -- KAIRI SYSTEM Sprint 2: authoritative initial item routing after payment approval.
+-- Revised V1: every shading item, including Roman, routes to Office. M1 only.
 -- SAFETY GATE: this migration must not be applied without explicit human approval.
 
 -- The production schema already has production_route ('internal'/'external') and
@@ -21,12 +23,9 @@ create type public.item_routing_owner_v1 as enum (
 alter table public.order_items
   alter column production_route drop default,
   alter column production_route drop not null,
-  add column roman_internal_fabric_cut boolean not null default false,
   add column routing_state public.item_routing_state_v1,
   add column routing_owner public.item_routing_owner_v1;
 
-comment on column public.order_items.roman_internal_fabric_cut is
-  'Explicit Roman exception: KAIRI-owned fabric requires internal cutting.';
 comment on column public.order_items.routing_state is
   'Authoritative initial V1 routing state assigned only after the payment gate passes.';
 comment on column public.order_items.routing_owner is
@@ -54,50 +53,21 @@ where o.id = oi.order_id
   );
 
 update public.order_items oi
-set routing_state = case oi.production_route
-      when 'internal' then 'awaiting_cut'::public.item_routing_state_v1
-      when 'external' then 'awaiting_supplier_order'::public.item_routing_state_v1
-    end,
-    routing_owner = case oi.production_route
-      when 'internal' then 'CUTTER'::public.item_routing_owner_v1
-      when 'external' then 'OFFICE_SUPPLIER'::public.item_routing_owner_v1
-    end
+set production_route = (case when oi.family = 'curtain' then 'internal' else 'external' end)::public.production_route,
+    routing_state = (case when oi.family = 'curtain' then 'awaiting_cut' else 'awaiting_supplier_order' end)::public.item_routing_state_v1,
+    routing_owner = (case when oi.family = 'curtain' then 'CUTTER' else 'OFFICE_SUPPLIER' end)::public.item_routing_owner_v1
 from public.orders o
-where o.id = oi.order_id
-  and oi.for_execution
-  and oi.item_status = 'new'
-  and o.status not in ('draft', 'quote', 'pending_payment', 'cancelled')
-  and exists (
-    select 1 from public.payments p
-    where p.order_id = o.id and p.payment_status = 'received'
-  )
-  and (
-    (oi.family = 'curtain' and oi.production_route = 'internal')
-    or (oi.family = 'shading' and oi.production_route = 'external')
-  );
-
--- A paid, still-new historical item whose old route contradicts the current
--- explicit policy is retained as legacy, not presented as a fresh approval.
-update public.order_items oi
-set routing_state = 'legacy_routed',
-    routing_owner = null
-from public.orders o
-where o.id = oi.order_id
-  and oi.for_execution
-  and oi.item_status = 'new'
-  and oi.routing_state is null
-  and o.status not in ('draft', 'quote', 'pending_payment', 'cancelled')
-  and exists (
-    select 1 from public.payments p
-    where p.order_id = o.id and p.payment_status = 'received'
-  )
-  and oi.production_route is not null;
+where o.id = oi.order_id and oi.for_execution and oi.item_status = 'new'
+  and o.status not in ('draft','quote','pending_payment','cancelled')
+  and exists (select 1 from public.payments p where p.order_id=o.id and p.payment_status='received');
 
 update public.order_items oi
 set routing_state = case when exists (
       select 1 from public.payments p
       where p.order_id = o.id and p.payment_status = 'received'
-    ) then 'legacy_routed'::public.item_routing_state_v1
+    ) and ((oi.family='curtain' and oi.production_route='internal')
+      or (oi.family='shading' and oi.production_route='external'))
+      then 'legacy_routed'::public.item_routing_state_v1
       else 'legacy_unverified'::public.item_routing_state_v1 end,
     routing_owner = null
 from public.orders o
@@ -106,8 +76,12 @@ where o.id = oi.order_id
   and oi.item_status <> 'new'
   and o.status not in ('draft', 'quote', 'pending_payment', 'cancelled');
 
--- An operational, paid, new item with no historical route needs review rather
--- than a guessed backfill. Current production schema declares route NOT NULL.
+insert into public.order_status_history(order_id,order_item_id,from_status,to_status,changed_by,note)
+select order_id,id,null,routing_state::text,null,
+  'Initial routing migration; source=M1; owner=' || coalesce(routing_owner::text,'none')
+from public.order_items;
+
+-- Abort the entire migration if any historical item remains unclassified.
 do $$
 begin
   if exists (
@@ -123,10 +97,6 @@ $$;
 alter table public.order_items
   alter column routing_state set default 'outside_execution',
   alter column routing_state set not null,
-  add constraint order_items_roman_internal_fabric_v1_check check (
-    not roman_internal_fabric_cut
-    or coalesce(family = 'shading' and subtype in ('רומי', 'roman'), false)
-  ),
   add constraint order_items_initial_routing_v1_check check (
     (
       routing_state = 'outside_execution'
@@ -136,12 +106,14 @@ alter table public.order_items
     or
     (
       routing_state = 'awaiting_cut'
+      and family = 'curtain'
       and production_route is not distinct from 'internal'::public.production_route
       and routing_owner is not distinct from 'CUTTER'::public.item_routing_owner_v1
     )
     or
     (
       routing_state = 'awaiting_supplier_order'
+      and family = 'shading'
       and production_route is not distinct from 'external'::public.production_route
       and routing_owner is not distinct from 'OFFICE_SUPPLIER'::public.item_routing_owner_v1
     )
@@ -187,14 +159,6 @@ begin
       and p.payment_status = 'received'
   ) into v_has_received_payment;
 
-  if new.roman_internal_fabric_cut
-     and not coalesce(
-       new.family = 'shading' and new.subtype in ('רומי', 'roman'), false
-     ) then
-    raise exception 'internal fabric cutting requires a Roman shading item'
-      using errcode = '23514';
-  end if;
-
   if tg_op = 'INSERT' then
     if new.item_status <> 'new' or new.assigned_worker is not null then
       raise exception 'new items must begin unassigned at item_status new'
@@ -208,7 +172,6 @@ begin
          new.order_id is distinct from old.order_id
          or new.family is distinct from old.family
          or new.subtype is distinct from old.subtype
-         or new.roman_internal_fabric_cut is distinct from old.roman_internal_fabric_cut
          or new.for_execution is distinct from old.for_execution
        ) then
       raise exception 'released item routing cannot be changed by an item edit'
@@ -269,12 +232,7 @@ begin
     return new;
   end if;
 
-  if new.family = 'curtain'
-     or (
-       new.family = 'shading'
-       and new.subtype in ('רומי', 'roman')
-       and new.roman_internal_fabric_cut
-     ) then
+  if new.family = 'curtain' then
     new.production_route := 'internal';
     new.routing_state := 'awaiting_cut';
     new.routing_owner := 'CUTTER';
@@ -295,7 +253,6 @@ create trigger order_items_normalize_initial_routing_v1
     subtype,
     for_execution,
     production_route,
-    roman_internal_fabric_cut,
     routing_state,
     routing_owner,
     item_status,
@@ -355,7 +312,6 @@ begin
     select oi.id,
            oi.family,
            oi.subtype,
-           oi.roman_internal_fabric_cut,
            oi.routing_state
     from public.order_items oi
     where oi.order_id = p_order_id
@@ -365,12 +321,7 @@ begin
     order by oi.sort_order, oi.id
     for update
   loop
-    if v_item.family = 'curtain'
-       or (
-         v_item.family = 'shading'
-         and v_item.subtype in ('רומי', 'roman')
-         and v_item.roman_internal_fabric_cut
-       ) then
+    if v_item.family = 'curtain' then
       v_route := 'internal';
       v_state := 'awaiting_cut';
       v_owner := 'CUTTER';
@@ -404,7 +355,6 @@ begin
       'Initial item routing; source=' || coalesce(p_source, 'unknown')
         || '; route=' || v_route::text
         || '; owner=' || v_owner::text
-        || '; roman_internal_fabric_cut=' || v_item.roman_internal_fabric_cut::text
     );
 
     v_count := v_count + 1;
@@ -437,7 +387,7 @@ end;
 $$;
 
 create trigger order_items_route_after_write_v1
-  after insert or update of order_id, for_execution, family, subtype, roman_internal_fabric_cut
+  after insert or update of order_id, for_execution, family, subtype
   on public.order_items
   for each row
   when (new.for_execution and new.routing_state = 'outside_execution')
@@ -545,3 +495,5 @@ end;
 $$;
 
 notify pgrst, 'reload schema';
+
+commit;

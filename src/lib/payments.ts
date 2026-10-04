@@ -23,10 +23,9 @@ interface PaymentAmountLike {
   payment_status?: PaymentStatus | string | null
 }
 
-// Rows created before migration 0015 have no status in stale clients/caches.
-// Treat only that legacy absence as received; pending/rejected never reduce balance.
+// Migration 0015 backfills historical rows. Unknown/missing status is not proof of receipt.
 export function isReceivedPayment(payment: PaymentAmountLike): boolean {
-  return payment.payment_status == null || payment.payment_status === 'received'
+  return payment.payment_status === 'received'
 }
 
 export function sumReceivedPayments(payments: PaymentAmountLike[] = []): number {

@@ -3,6 +3,7 @@ import { supabase } from '../../lib/supabase'
 import { Profile, UserRole } from '../../types'
 
 const ROLE_LABELS: Record<UserRole, string> = {
+  cutter: 'גזרן',
   admin: 'אדמין', office: 'משרד', sales: 'סוכן', viewer: 'צפייה בלבד',
 }
 
