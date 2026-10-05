@@ -19,6 +19,7 @@ import ItemSelectionDialog from './ItemSelectionDialog'
 import SignatureModal from '../../components/SignatureModal'
 import { uploadSignature, getSignatureUrl } from '../../lib/uploadSignature'
 import { recalculateOrderStatus } from '../../lib/recalculateOrderStatus'
+import { refreshOrderPdf, CUSTOMER_PDF_UPDATE_WARNING } from '../../lib/uploadOrderPdf'
 
 export default function EditOrder() {
   const { id } = useParams()
@@ -242,8 +243,14 @@ export default function EditOrder() {
         if (error) throw error
       }
 
-      // מקור ה-PDF נשמר; ההדפסה הדינמית נמצאת בפרטי ההזמנה.
       await recalculateOrderStatus(id!, profile?.id ?? null)
+
+      try {
+        await refreshOrderPdf(id!)
+      } catch {
+        setError(CUSTOMER_PDF_UPDATE_WARNING)
+        return
+      }
 
       if (!signatureUploadFailed) {
         navigate(`/orders/${id}`)

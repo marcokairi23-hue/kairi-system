@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react'
-import { ArrowLeft, Printer, Wrench, MessageCircle, Pencil, ListChecks, CircleCheck, Square, PenLine, TriangleAlert, FileText, Send, Mail } from 'lucide-react'
+import { ArrowLeft, Printer, Wrench, MessageCircle, Pencil, ListChecks, CircleCheck, Square, PenLine, TriangleAlert, FileText, FileCheck, Send, Mail } from 'lucide-react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/auth'
@@ -8,9 +8,8 @@ import OrderActivityTab from './OrderActivityTab'
 import ItemSelectionDialog from './ItemSelectionDialog'
 import StatusSuggestionBanner from './StatusSuggestionBanner'
 import PaymentModal from './PaymentModal'
-import { getSignatureUrl, getSignatureDataUrl, uploadSignature } from '../../lib/uploadSignature'
+import { getSignatureUrl, uploadSignature } from '../../lib/uploadSignature'
 import SignatureModal from '../../components/SignatureModal'
-import { generateOrderPdf } from '../../lib/generateOrderPdf'
 import {
   ORDER_STATUS_LABELS, ORDER_STATUS_COLORS, ORDER_STATUS_NEXT,
   ITEM_STATUS_LABELS, ITEM_STATUS_COLORS, SHADING_LABELS, calcProgress,
@@ -18,6 +17,7 @@ import {
   deriveV1OrderStatus,
 } from '../../lib/statusHelpers'
 import { recalculateOrderStatus } from '../../lib/recalculateOrderStatus'
+import { refreshOrderPdf, generateCurrentOrderPdf, getUpdatedOrderPdfDisplayUrl, CUSTOMER_PDF_UPDATE_WARNING } from '../../lib/uploadOrderPdf'
 
 interface OrderItem {
   id: string
@@ -90,6 +90,7 @@ export default function OrderDetail() {
   const { id } = useParams()
   const navigate = useNavigate()
   const [order, setOrder] = useState<Order | null>(null)
+  const [pdfDisplayVersion, setPdfDisplayVersion] = useState(Date.now())
   const [loading, setLoading] = useState(true)
   const [signatureImgUrl, setSignatureImgUrl] = useState<string | null>(null)
   const [agentSignatureImgUrl, setAgentSignatureImgUrl] = useState<string | null>(null)
@@ -124,6 +125,7 @@ export default function OrderDetail() {
       .eq('id', id)
       .single()
     setOrder(data ? { ...data, status: deriveV1OrderStatus(data) } as Order : null)
+    if (data) setPdfDisplayVersion(Date.now())
     setLoading(false)
     setApproverName(null)
     if (data?.payment_approved_by) {
@@ -174,6 +176,7 @@ export default function OrderDetail() {
 
   const form = buildFormFromOrder(order)
   const orderNum = order.order_number ?? 'טיוטה'
+  const updatedPdfUrl = order.pdf_url ? getUpdatedOrderPdfDisplayUrl(order.pdf_url, pdfDisplayVersion) : null
 
   const advanceStatus = async () => {
     if (!nextStatus) return
@@ -204,6 +207,11 @@ export default function OrderDetail() {
       if (failure) throw failure
       await recalculateOrderStatus(id!, profile?.id ?? null)
       setOfficeSelectionOpen(false)
+      try {
+        await refreshOrderPdf(id!)
+      } catch {
+        setSyncError(CUSTOMER_PDF_UPDATE_WARNING)
+      }
       await load()
     } catch (err) {
       setSelectionError('שגיאה בשמירת הבחירה: ' + (err instanceof Error ? err.message : String(err)))
@@ -270,18 +278,7 @@ export default function OrderDetail() {
     const preview = window.open('', '_blank')
     try {
       if (!preview) throw new Error('יש לאפשר חלון חדש כדי לפתוח את ה-PDF')
-      const { data: current, error: readError } = await supabase.from('orders')
-        .select('*, profiles!orders_agent_id_fkey(full_name), customers(city), order_items(*), payments(*)')
-        .eq('id', id).single()
-      if (readError) throw readError
-      if (!current) throw new Error('הזמנה לא נמצאה')
-      const [customerSignature, agentSignature] = await Promise.all([
-        current.signature_url ? getSignatureDataUrl(current.signature_url) : Promise.resolve(null),
-        current.agent_signature_url ? getSignatureDataUrl(current.agent_signature_url) : Promise.resolve(null),
-      ])
-      const pdfBlob = await generateOrderPdf({
-        ...buildFormFromOrder(current), signatureDataUrl: customerSignature, agentSignatureDataUrl: agentSignature,
-      }, current.order_number ?? 'טיוטה', true)
+      const pdfBlob = await generateCurrentOrderPdf(id!)
       const url = URL.createObjectURL(pdfBlob)
       preview.location.href = url
       window.setTimeout(() => URL.revokeObjectURL(url), 300_000)
@@ -297,7 +294,7 @@ export default function OrderDetail() {
   const sendPdfLinkWhatsApp = () => {
     if (!order.pdf_url) return
     const phone = order.phone_snapshot.replace(/\D/g, '').replace(/^0/, '972')
-    const text = `שלום ${order.customer_name_snapshot} 😊\nהנה טופס הזמנה מספר #${orderNum} מקאירי וילונות:\n${order.pdf_url}`
+    const text = `שלום ${order.customer_name_snapshot} 😊\nהנה טופס הזמנה מספר #${orderNum} מקאירי וילונות:\n${updatedPdfUrl}`
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, '_blank')
   }
 
@@ -306,7 +303,8 @@ export default function OrderDetail() {
     if (!order.pdf_url) return
     setSharingPdf(true); setShareError(null)
     try {
-      const res = await fetch(order.pdf_url)
+      const res = await fetch(updatedPdfUrl!, { cache: 'no-store' })
+      if (!res.ok) throw new Error('לא ניתן לטעון את PDF הלקוח המעודכן')
       const blob = await res.blob()
       const file = new File([blob], `הזמנה-${orderNum}.pdf`, { type: 'application/pdf' })
       if (navigator.canShare && navigator.canShare({ files: [file] })) {
@@ -347,7 +345,7 @@ export default function OrderDetail() {
           phone,
           customer_name: order.customer_name_snapshot,
           order_number: orderNum,
-          pdf_url: order.pdf_url,
+            pdf_url: updatedPdfUrl,
         }),
       })
       setMakeResult(res.ok ? 'ok' : 'error')
@@ -421,11 +419,18 @@ export default function OrderDetail() {
       </div>
 
       {syncError && <p role="alert" className="text-red-600 text-sm mb-3">{syncError}</p>}
-      {order.pdf_url_original && (
-        <a href={order.pdf_url_original} target="_blank" rel="noreferrer" className="btn-ghost text-sm inline-flex items-center gap-1 mb-3">
-          <FileText size={16} aria-hidden="true" /> PDF מקור
-        </a>
-      )}
+      <div className="flex flex-wrap gap-2 mb-3">
+        {order.pdf_url_original && (
+          <a href={order.pdf_url_original} target="_blank" rel="noreferrer" className="btn-ghost text-sm inline-flex items-center gap-1">
+            <FileText size={16} aria-hidden="true" /> PDF מקור
+          </a>
+        )}
+        {order.pdf_url && (
+          <a href={updatedPdfUrl!} target="_blank" rel="noreferrer" className="btn-ghost text-sm inline-flex items-center gap-1">
+            <FileCheck size={16} aria-hidden="true" /> PDF לקוח מעודכן
+          </a>
+        )}
+      </div>
 
       {/* עדכון סטטוס */}
       {order.status !== 'completed' && order.status !== 'cancelled' && (
@@ -596,22 +601,22 @@ export default function OrderDetail() {
         <div className="card p-4 mb-3">
           <div className="flex items-center justify-between gap-3 mb-3">
             <div className="text-sm min-w-0">
-              <div className="text-xs font-bold text-slate-500 mb-1">PDF שנשמר ביצירת ההזמנה</div>
-              <a href={order.pdf_url} target="_blank" rel="noreferrer" className="text-brand underline break-all">
+              <div className="text-xs font-bold text-slate-500 mb-1">PDF לקוח מעודכן</div>
+              <a href={updatedPdfUrl!} target="_blank" rel="noreferrer" className="text-brand underline break-all">
                 {order.pdf_url}
               </a>
             </div>
             <div className="flex gap-2 shrink-0">
               <button
                 className="btn-ghost text-sm"
-                onClick={() => navigator.clipboard.writeText(order.pdf_url!)}
+                onClick={() => navigator.clipboard.writeText(updatedPdfUrl!)}
               >
                 העתק קישור
               </button>
             </div>
           </div>
 
-          <div className="text-xs font-bold text-slate-500 mb-2">שליחת PDF שנשמר ללקוח</div>
+          <div className="text-xs font-bold text-slate-500 mb-2">שליחת PDF לקוח מעודכן</div>
           <div className="grid grid-cols-2 gap-2">
             <button className="btn-ghost text-sm" onClick={sendPdfLinkWhatsApp}>
               <MessageCircle size={16} className="inline-block me-1" aria-hidden="true" /> קישור ב-WhatsApp

@@ -4,6 +4,7 @@ import { useAuth } from '../../lib/auth'
 import { PAYMENT_METHODS } from './types'
 import { fmt } from '../../lib/statusHelpers'
 import { recalculateOrderStatus } from '../../lib/recalculateOrderStatus'
+import { refreshOrderPdf, CUSTOMER_PDF_UPDATE_WARNING } from '../../lib/uploadOrderPdf'
 
 interface Props {
   orderId: string
@@ -55,6 +56,14 @@ export default function PaymentModal({
       await recalculateOrderStatus(orderId, profile?.id ?? null)
     } catch {
       setError('התשלום נשמר, אך עדכון סטטוס ההזמנה נכשל. יש לרענן ולבדוק את ההזמנה לפני הוספת תשלום נוסף.')
+      setBusy(false)
+      return
+    }
+    try {
+      await refreshOrderPdf(orderId)
+    } catch {
+      onSaved()
+      setError(CUSTOMER_PDF_UPDATE_WARNING)
       setBusy(false)
       return
     }

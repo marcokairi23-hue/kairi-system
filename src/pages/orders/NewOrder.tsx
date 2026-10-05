@@ -18,7 +18,7 @@ import ItemSelectionDialog from './ItemSelectionDialog'
 import SignatureModal from '../../components/SignatureModal'
 import { uploadSignature } from '../../lib/uploadSignature'
 import { generateOrderPdf } from '../../lib/generateOrderPdf'
-import { uploadOrderPdf } from '../../lib/uploadOrderPdf'
+import { uploadOrderPdf, refreshOrderPdf, CUSTOMER_PDF_UPDATE_WARNING } from '../../lib/uploadOrderPdf'
 import { deriveV1OrderStatus } from '../../lib/statusHelpers'
 import { recalculateOrderStatus } from '../../lib/recalculateOrderStatus'
 
@@ -140,6 +140,12 @@ export default function NewOrder() {
       if (!approvedOrder) throw new Error('ההזמנה לא עודכנה')
       await recalculateOrderStatus(receipt.orderId, receipt.by)
       setReceipt(null)
+      try {
+        await refreshOrderPdf(receipt.orderId)
+      } catch {
+        setError(CUSTOMER_PDF_UPDATE_WARNING)
+        return
+      }
       navigate('/orders')
     } catch {
       setError(paymentExists
@@ -346,10 +352,10 @@ export default function NewOrder() {
       // הפקת PDF והעלאה ל-Storage (לא חוסמת את שמירת ההזמנה בכישלון)
       try {
         const pdfBlob = await generateOrderPdf(f, allocatedNumber ?? 'טיוטה', true)
-        const pdfUrl = await uploadOrderPdf(order.id, pdfBlob)
         const pdfUrlOriginal = await uploadOrderPdf(order.id, pdfBlob, true)
-        const { error: pdfWriteError } = await supabase.from('orders').update({ pdf_url: pdfUrl, pdf_url_original: pdfUrlOriginal }).eq('id', order.id)
+        const { error: pdfWriteError } = await supabase.from('orders').update({ pdf_url_original: pdfUrlOriginal }).eq('id', order.id)
         if (pdfWriteError) throw pdfWriteError
+        await refreshOrderPdf(order.id)
       } catch (pdfErr) {
         console.error('שגיאה בהפקת/העלאת PDF ההזמנה:', pdfErr)
       }
