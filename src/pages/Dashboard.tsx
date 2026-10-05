@@ -46,32 +46,42 @@ export default function Dashboard() {
   const [lastChange, setLastChange] = useState<Map<string, string>>(new Map())
   const [activity, setActivity] = useState<ActivityRow[]>([])
   const [loading, setLoading] = useState(true)
+  const [activityError, setActivityError] = useState<string | null>(null)
+  const [loadError, setLoadError] = useState<string | null>(null)
   const [stuckDays, setStuckDays] = useState(DEFAULT_STUCK_DAYS)
   const [stuckDaysInput, setStuckDaysInput] = useState(String(DEFAULT_STUCK_DAYS))
 
   useEffect(() => {
     const load = async () => {
-      const [ordersRes, historyRes, settingsRes, activityRows] = await Promise.all([
-        supabase.from('orders').select('id, order_number, status, payment_approved, customer_name_snapshot, final_total, created_at, order_items(item_status, for_execution), payments(amount)'),
-        supabase.from('order_status_history').select('order_id, changed_at').order('changed_at', { ascending: false }),
-        supabase.from('settings').select('value').eq('key', 'stuck_order_days').maybeSingle(),
-        fetchActivity({ perSourceLimit: 10 }),
-      ])
+      try {
+        const [ordersRes, historyRes, settingsRes, activityRows] = await Promise.all([
+          supabase.from('orders').select('id, order_number, status, payment_approved, customer_name_snapshot, final_total, created_at, order_items(item_status, for_execution), payments(amount)'),
+          supabase.from('order_status_history').select('order_id, changed_at').order('changed_at', { ascending: false }),
+          supabase.from('settings').select('value').eq('key', 'stuck_order_days').maybeSingle(),
+          fetchActivity({ perSourceLimit: 10, throwOnError: true }).catch(() => {
+            setActivityError('לא ניתן לטעון את הפעילות האחרונה.')
+            return []
+          }),
+        ])
 
-      setOrders(((ordersRes.data ?? []) as DashOrder[]).map(order => ({ ...order, status: deriveV1OrderStatus(order) })))
+        setOrders(((ordersRes.data ?? []) as DashOrder[]).map(order => ({ ...order, status: deriveV1OrderStatus(order) })))
 
-      const map = new Map<string, string>()
-      for (const h of historyRes.data ?? []) {
-        if (!map.has(h.order_id)) map.set(h.order_id, h.changed_at)
+        const map = new Map<string, string>()
+        for (const h of historyRes.data ?? []) {
+          if (!map.has(h.order_id)) map.set(h.order_id, h.changed_at)
+        }
+        setLastChange(map)
+
+        const days = typeof settingsRes.data?.value === 'number' ? settingsRes.data.value : DEFAULT_STUCK_DAYS
+        setStuckDays(days)
+        setStuckDaysInput(String(days))
+
+        setActivity(activityRows.slice(0, 10))
+      } catch {
+        setLoadError('לא ניתן לטעון חלק מנתוני המסך הראשי. נסו לרענן.')
+      } finally {
+        setLoading(false)
       }
-      setLastChange(map)
-
-      const days = typeof settingsRes.data?.value === 'number' ? settingsRes.data.value : DEFAULT_STUCK_DAYS
-      setStuckDays(days)
-      setStuckDaysInput(String(days))
-
-      setActivity(activityRows.slice(0, 10))
-      setLoading(false)
     }
     load()
   }, [])
@@ -108,6 +118,7 @@ export default function Dashboard() {
     <div>
       <h1 className="text-2xl font-bold mb-1">שלום, {profile?.full_name}</h1>
       <p className="text-slate-500 mb-6">מה עושים היום?</p>
+      {loadError && <p role="alert" className="text-red-600 text-sm mb-3">{loadError}</p>}
 
       {/* יתרות + סטטוסים */}
       {showBalance && (
@@ -194,7 +205,8 @@ export default function Dashboard() {
                 <div className="text-xs font-bold text-slate-500">פעילות אחרונה</div>
                 <Link to="/activity" className="text-xs text-brand">כל הפעילות</Link>
               </div>
-              {activity.length === 0 && <p className="text-slate-400 text-sm">אין פעילות</p>}
+              {activityError && <p role="alert" className="text-red-600 text-sm">{activityError}</p>}
+              {!activityError && activity.length === 0 && <p className="text-slate-400 text-sm">אין פעילות</p>}
               {activity.map(row => <ActivityRowLine key={`${row.source}-${row.id}`} row={row} />)}
             </div>
           )}

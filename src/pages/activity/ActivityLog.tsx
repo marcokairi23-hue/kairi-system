@@ -8,7 +8,7 @@ const PAGE_SIZE = 50
 interface BaseRow {
   id: string
   order_id: string
-  changed_at: string
+  changed_at: string | null | undefined
   profiles: { full_name: string } | null
   orders: { order_number: number | null } | null
 }
@@ -45,12 +45,20 @@ function describe(row: ActivityRow): string {
   return row.note || `→ ${ORDER_STATUS_LABELS[row.to_status] ?? row.to_status}`
 }
 
-export function dayLabel(iso: string): string {
-  return new Date(iso).toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit', year: 'numeric' })
+function activityTimestamp(iso: string | null | undefined): number | null {
+  if (!iso?.trim()) return null
+  const timestamp = Date.parse(iso)
+  return Number.isFinite(timestamp) ? timestamp : null
 }
 
-function timeLabel(iso: string): string {
-  return new Date(iso).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })
+export function dayLabel(iso: string | null | undefined): string {
+  const timestamp = activityTimestamp(iso)
+  return timestamp === null ? '-' : new Date(timestamp).toLocaleDateString('he-IL', { day: '2-digit', month: '2-digit', year: 'numeric' })
+}
+
+function timeLabel(iso: string | null | undefined): string {
+  const timestamp = activityTimestamp(iso)
+  return timestamp === null ? '-' : new Date(timestamp).toLocaleTimeString('he-IL', { hour: '2-digit', minute: '2-digit' })
 }
 
 // שולף מ-order_status_history ומ-payments, ומאחד לרשימה אחת ממוינת לפי זמן.
@@ -61,8 +69,9 @@ export async function fetchActivity(opts: {
   typeFilter?: ActivityTypeFilter
   perSourceLimit?: number
   ascending?: boolean
+  throwOnError?: boolean
 }): Promise<ActivityRow[]> {
-  const { orderId, userId, typeFilter = 'all', perSourceLimit, ascending = false } = opts
+  const { orderId, userId, typeFilter = 'all', perSourceLimit, ascending = false, throwOnError = false } = opts
 
   const wantStatus = typeFilter === 'all' || typeFilter === 'order' || typeFilter === 'item'
   const wantPayment = typeFilter === 'all' || typeFilter === 'payment'
@@ -80,7 +89,8 @@ export async function fetchActivity(opts: {
     if (typeFilter === 'order') q = q.is('order_item_id', null)
     if (typeFilter === 'item') q = q.not('order_item_id', 'is', null)
     if (perSourceLimit) q = q.limit(perSourceLimit)
-    const { data } = await q
+    const { data, error } = await q
+    if (error && throwOnError) throw error
     statusRows.push(...(data ?? []).map((r: any): StatusActivityRow => ({ ...r, source: 'status' })))
   }
 
@@ -92,7 +102,8 @@ export async function fetchActivity(opts: {
     if (orderId) q = q.eq('order_id', orderId)
     if (userId) q = q.eq('received_by', userId)
     if (perSourceLimit) q = q.limit(perSourceLimit)
-    const { data } = await q
+    const { data, error } = await q
+    if (error && throwOnError) throw error
     paymentRows.push(...(data ?? []).map((r: any): PaymentActivityRow => ({
       source: 'payment',
       id: r.id,
@@ -105,9 +116,13 @@ export async function fetchActivity(opts: {
     })))
   }
 
-  return [...statusRows, ...paymentRows].sort((a, b) =>
-    ascending ? a.changed_at.localeCompare(b.changed_at) : b.changed_at.localeCompare(a.changed_at)
-  )
+  return [...statusRows, ...paymentRows].sort((a, b) => {
+    const aTime = activityTimestamp(a.changed_at)
+    const bTime = activityTimestamp(b.changed_at)
+    if (aTime === null) return bTime === null ? 0 : 1
+    if (bTime === null) return -1
+    return ascending ? aTime - bTime : bTime - aTime
+  })
 }
 
 export function ActivityRowLine({ row, showOrderNumber = true }: { row: ActivityRow; showOrderNumber?: boolean }) {
@@ -130,6 +145,7 @@ export function ActivityRowLine({ row, showOrderNumber = true }: { row: Activity
 export default function ActivityLog() {
   const [rows, setRows] = useState<ActivityRow[]>([])
   const [loading, setLoading] = useState(true)
+  const [error, setError] = useState<string | null>(null)
   const [hasMore, setHasMore] = useState(true)
   const [users, setUsers] = useState<{ id: string; full_name: string }[]>([])
   const [userFilter, setUserFilter] = useState('')
@@ -141,14 +157,21 @@ export default function ActivityLog() {
 
   const load = async (count: number) => {
     setLoading(true)
-    const merged = await fetchActivity({
-      userId: userFilter || undefined,
-      typeFilter,
-      perSourceLimit: count,
-    })
-    setRows(merged.slice(0, count))
-    setHasMore(merged.length > count)
-    setLoading(false)
+    setError(null)
+    try {
+      const merged = await fetchActivity({
+        userId: userFilter || undefined,
+        typeFilter,
+        perSourceLimit: count,
+        throwOnError: true,
+      })
+      setRows(merged.slice(0, count))
+      setHasMore(merged.length > count)
+    } catch {
+      setError('לא ניתן לטעון את יומן הפעילות. נסו שוב.')
+    } finally {
+      setLoading(false)
+    }
   }
 
   useEffect(() => { load(PAGE_SIZE) }, [userFilter, typeFilter])
@@ -178,7 +201,8 @@ export default function ActivityLog() {
       </div>
 
       {loading && rows.length === 0 && <p className="text-slate-400 text-sm">טוען…</p>}
-      {!loading && rows.length === 0 && <p className="text-slate-400 text-sm">אין פעילות</p>}
+      {error && <p role="alert" className="text-red-600 text-sm">{error}</p>}
+      {!loading && !error && rows.length === 0 && <p className="text-slate-400 text-sm">אין פעילות</p>}
 
       {Object.entries(grouped).map(([day, dayRows]) => (
         <div key={day} className="card mb-3">
