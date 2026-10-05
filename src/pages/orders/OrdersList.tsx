@@ -11,8 +11,9 @@ import SyncItemsDialog from './SyncItemsDialog'
 import SyncOrderDialog from './SyncOrderDialog'
 import { ActionOrder } from './OrderActions'
 import {
-  ORDER_STATUS_NEXT, ORDER_TO_ITEM_STATUS, suggestOrderStatus, fmt,
+  ORDER_STATUS_NEXT, ORDER_TO_ITEM_STATUS, suggestOrderStatus, fmt, deriveV1OrderStatus,
 } from '../../lib/statusHelpers'
+import { recalculateOrderStatus } from '../../lib/recalculateOrderStatus'
 
 type Order = ActionOrder & { created_at: string }
 type SortKey = 'order_number' | 'customer' | 'created_at' | 'total' | 'status'
@@ -24,10 +25,11 @@ const TABS: { key: string; label: string; statuses: string[] }[] = [
   { key: 'all',        label: 'כל ההזמנות',   statuses: [] },
   { key: 'balance',    label: 'יתרה פתוחה',   statuses: [] },
   { key: 'quote',      label: 'הצעות מחיר',   statuses: ['quote'] },
-  { key: 'pending',    label: 'ממתין לגבייה', statuses: ['pending_payment'] },
-  { key: 'ready',      label: 'חדש לביצוע',   statuses: ['ready'] },
-  { key: 'production', label: 'בייצור',        statuses: ['in_production'] },
-  { key: 'installable', label: 'מוכן',         statuses: ['ready_for_install'] },
+  { key: 'draft',      label: 'טיוטה',       statuses: ['draft'] },
+  { key: 'pending',    label: 'ממתין לגבייה', statuses: ['waiting_payment'] },
+  { key: 'ready',      label: 'חדש לביצוע',   statuses: ['new_execution'] },
+  { key: 'production', label: 'בביצוע',       statuses: ['in_execution'] },
+  { key: 'installable', label: 'מוכן',        statuses: ['ready'] },
   { key: 'completed',  label: 'הושלמו',        statuses: ['completed'] },
 ]
 
@@ -103,7 +105,7 @@ export default function OrdersList() {
       .select('*, profiles!orders_agent_id_fkey(full_name), order_items(*), payments(*)')
       .order('created_at', { ascending: false })
     if (error) console.error('שגיאה בטעינת הזמנות:', error)
-    setOrders((data ?? []) as Order[])
+    setOrders(((data ?? []) as Order[]).map(order => ({ ...order, status: deriveV1OrderStatus(order) })))
     setLoading(false)
   }
 
@@ -187,6 +189,7 @@ export default function OrdersList() {
 
   // ---------- אחרי עדכון פריטים: בדוק אם לקדם הזמנה ----------
   const afterItemsUpdate = async (orderId: string) => {
+    await recalculateOrderStatus(orderId, profile?.id ?? null)
     await load()
 
     // שלוף מחדש את ההזמנה המעודכנת

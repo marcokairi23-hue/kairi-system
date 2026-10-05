@@ -3,15 +3,15 @@ import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { ActivityRow, ActivityRowLine, fetchActivity } from './activity/ActivityLog'
-import { ORDER_STATUS_LABELS, ORDER_STATUS_COLORS, calcProgress, fmt } from '../lib/statusHelpers'
+import { ORDER_STATUS_LABELS, ORDER_STATUS_COLORS, calcProgress, fmt, deriveV1OrderStatus } from '../lib/statusHelpers'
 import { useFeature } from '../lib/featureFlags'
 
 const STATUS_CARDS: { tab: string; status: string }[] = [
   { tab: 'quote', status: 'quote' },
-  { tab: 'pending', status: 'pending_payment' },
-  { tab: 'ready', status: 'ready' },
-  { tab: 'production', status: 'in_production' },
-  { tab: 'installable', status: 'ready_for_install' },
+  { tab: 'pending', status: 'waiting_payment' },
+  { tab: 'ready', status: 'new_execution' },
+  { tab: 'production', status: 'in_execution' },
+  { tab: 'installable', status: 'ready' },
   { tab: 'completed', status: 'completed' },
 ]
 
@@ -21,6 +21,7 @@ interface DashOrder {
   id: string
   order_number: number | null
   status: string
+  payment_approved?: boolean | null
   customer_name_snapshot: string
   final_total: number
   created_at: string
@@ -51,13 +52,13 @@ export default function Dashboard() {
   useEffect(() => {
     const load = async () => {
       const [ordersRes, historyRes, settingsRes, activityRows] = await Promise.all([
-        supabase.from('orders').select('id, order_number, status, customer_name_snapshot, final_total, created_at, order_items(item_status, for_execution), payments(amount)'),
+        supabase.from('orders').select('id, order_number, status, payment_approved, customer_name_snapshot, final_total, created_at, order_items(item_status, for_execution), payments(amount)'),
         supabase.from('order_status_history').select('order_id, changed_at').order('changed_at', { ascending: false }),
         supabase.from('settings').select('value').eq('key', 'stuck_order_days').maybeSingle(),
         fetchActivity({ perSourceLimit: 10 }),
       ])
 
-      setOrders((ordersRes.data ?? []) as DashOrder[])
+      setOrders(((ordersRes.data ?? []) as DashOrder[]).map(order => ({ ...order, status: deriveV1OrderStatus(order) })))
 
       const map = new Map<string, string>()
       for (const h of historyRes.data ?? []) {
@@ -92,7 +93,7 @@ export default function Dashboard() {
   const countByStatus = (status: string) => orders.filter(o => o.status === status).length
 
   const inProduction = orders
-    .filter(o => o.status === 'in_production' || o.status === 'ready_for_install')
+    .filter(o => o.status === 'in_execution' || o.status === 'ready')
 
   const stuckMs = stuckDays * 86400000
   const now = Date.now()
@@ -175,7 +176,7 @@ export default function Dashboard() {
                   <Link key={o.id} to={`/orders/${o.id}`} className="block py-2 border-b border-slate-100 last:border-0">
                     <div className="flex items-center justify-between text-sm">
                       <span>#{o.order_number} {o.customer_name_snapshot}</span>
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${ORDER_STATUS_COLORS[o.status] ?? 'bg-slate-100'}`}>
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${ORDER_STATUS_COLORS[o.status] ?? 'bg-slate-100'}`}>
                         {ORDER_STATUS_LABELS[o.status]}
                       </span>
                     </div>
@@ -225,7 +226,7 @@ export default function Dashboard() {
               <Link to="/items" className="card p-5 hover:shadow-md transition-shadow">
                 <div className="text-lg font-bold">פריטים</div>
                 <div className="text-sm text-slate-500 mt-1">
-                  מעקב ייצור לפי פריט — גזירה, תפירה, מוכן
+                  מעקב פריטים — חדש, בהכנה, מוכן, הושלם
                 </div>
               </Link>
 

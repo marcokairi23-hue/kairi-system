@@ -6,11 +6,10 @@
 export const ORDER_STATUS_LABELS: Record<string, string> = {
   draft: 'טיוטה',
   quote: 'הצעת מחיר',
-  pending_payment: 'ממתין לגבייה',
-  ready: 'חדש לביצוע',
-  in_production: 'בייצור',
-  ready_for_install: 'מוכן',
-  picked_by_installer: 'נאסף ע"י מתקין',
+  waiting_payment: 'ממתין לגבייה',
+  new_execution: 'חדש לביצוע',
+  in_execution: 'בביצוע',
+  ready: 'מוכן',
   completed: 'הושלם',
   cancelled: 'מבוטל',
 }
@@ -18,94 +17,96 @@ export const ORDER_STATUS_LABELS: Record<string, string> = {
 export const ORDER_STATUS_COLORS: Record<string, string> = {
   draft: 'bg-slate-100 text-slate-600',
   quote: 'bg-slate-100 text-slate-700',
-  pending_payment: 'bg-amber-100 text-amber-700',
-  ready: 'bg-blue-100 text-blue-700',
-  in_production: 'bg-purple-100 text-purple-700',
-  ready_for_install: 'bg-teal-100 text-teal-700',
-  picked_by_installer: 'bg-indigo-100 text-indigo-700',
+  waiting_payment: 'bg-amber-100 text-amber-700',
+  new_execution: 'bg-blue-100 text-blue-700',
+  in_execution: 'bg-purple-100 text-purple-700',
+  ready: 'bg-teal-100 text-teal-700',
   completed: 'bg-green-100 text-green-700',
   cancelled: 'bg-red-100 text-red-700',
 }
 
 // הזמנה "פעילה" (יצאה מתהליך המכירה/גבייה, יש לה עבודה בפועל) — משמש למסך הפריטים
 // (DEFECTS_MAP #20): פריט לא אמור להופיע שם כל עוד ההזמנה שלו עדיין quote/pending_payment/draft.
-export const ACTIVE_ORDER_STATUSES = ['ready', 'in_production', 'ready_for_install', 'picked_by_installer', 'completed']
+export const ACTIVE_ORDER_STATUSES = ['new_execution', 'in_execution', 'ready', 'completed']
 
 // זרימת הסטטוסים: מה הבא בתור
-export const ORDER_STATUS_NEXT: Record<string, string | undefined> = {
-  quote: 'pending_payment',
-  pending_payment: 'ready',
-  ready: 'in_production',
-  in_production: 'ready_for_install',
-  ready_for_install: 'picked_by_installer',
-  picked_by_installer: 'completed',
+export const ORDER_STATUS_NEXT: Record<string, string | undefined> = {}
+
+export type V1OrderStatus = 'draft' | 'quote' | 'waiting_payment' | 'new_execution' | 'in_execution' | 'ready' | 'completed'
+
+export interface OrderStatusInput {
+  status?: string
+  payment_approved?: boolean | null
+  final_total: number
+  order_items?: ItemLike[]
+  payments?: { amount: number }[]
+}
+
+export function deriveV1OrderStatus(order: OrderStatusInput, submitted = true): V1OrderStatus | 'cancelled' {
+  if (!submitted || order.status === 'draft') return 'draft'
+  if (order.status === 'cancelled') return 'cancelled'
+  const execution = (order.order_items ?? []).filter(i => i.for_execution && i.item_status !== 'cancelled')
+  if (execution.length === 0) return 'quote'
+  if (order.payment_approved !== true) return 'waiting_payment'
+  if (execution.every(i => i.item_status === 'new')) return 'new_execution'
+  if (execution.every(i => i.item_status === 'ready')) return 'ready'
+  const paid = (order.payments ?? []).reduce((sum, p) => sum + Number(p.amount), 0)
+  // Allow only floating-point summation error, not a rounded-away outstanding amount.
+  const zeroBalance = Math.abs(order.final_total - paid) <= Number.EPSILON * Math.max(1, Math.abs(order.final_total), Math.abs(paid)) * ((order.payments?.length ?? 0) + 1)
+  if (execution.every(i => i.item_status === 'done') && Number.isFinite(paid) && Number.isFinite(order.final_total) && zeroBalance) return 'completed'
+  return 'in_execution'
 }
 
 // ---------- סטטוסי פריט ----------
-// חדש → נגזר → במתפרה → מוכן → הותקן
+// Active V1 workflow; cancelled is display-only legacy compatibility.
 export const ITEM_STATUS_LABELS: Record<string, string> = {
   new: 'חדש',
-  cut: 'נגזר',
-  sewing: 'במתפרה',
-  ordered_from_supplier: 'הוזמן מספק',
-  arrived: 'הגיע מספק',
+  preparation: 'בהכנה',
   ready: 'מוכן',
-  installed: 'הותקן',
+  done: 'הושלם',
   cancelled: 'מבוטל',
 }
 
 export const ITEM_STATUS_COLORS: Record<string, string> = {
   new: 'bg-slate-100 text-slate-700',
-  cut: 'bg-amber-100 text-amber-700',
-  sewing: 'bg-purple-100 text-purple-700',
-  ordered_from_supplier: 'bg-amber-100 text-amber-700',
-  arrived: 'bg-purple-100 text-purple-700',
+  preparation: 'bg-purple-100 text-purple-700',
   ready: 'bg-teal-100 text-teal-700',
-  installed: 'bg-green-100 text-green-700',
+  done: 'bg-green-100 text-green-700',
   cancelled: 'bg-red-100 text-red-700',
 }
 
-export const ITEM_STATUS_ORDER = ['new', 'cut', 'sewing', 'ordered_from_supplier', 'arrived', 'ready', 'installed'] as const
+export const ITEM_STATUS_ORDER = ['new', 'preparation', 'ready', 'done'] as const
 
-// ---------- מסלול ייצור פר-פריט (פנימי/חיצוני), לפי production_route ----------
-export const INTERNAL_ITEM_TRACK = ['new', 'cut', 'sewing', 'ready'] as const
-export const EXTERNAL_ITEM_TRACK = ['new', 'ordered_from_supplier', 'arrived', 'ready'] as const
+// The V1 status sequence is independent of production route.
+export const INTERNAL_ITEM_TRACK = ITEM_STATUS_ORDER
+export const EXTERNAL_ITEM_TRACK = ITEM_STATUS_ORDER
 
-// הצעד הבא במסלול של הפריט (לפי production_route), או null אם הגיע ל"מוכן"/לא במסלול
+// Keep the existing call signature; done and legacy values have no next step.
 export function nextItemStatus(
-  route: 'cutter' | 'office',
+  _route: 'cutter' | 'office',
   currentStatus: string
 ): string | null {
-  const track = route === 'cutter' ? INTERNAL_ITEM_TRACK : EXTERNAL_ITEM_TRACK
+  const track = ITEM_STATUS_ORDER
   const idx = track.indexOf(currentStatus as never)
   if (idx === -1 || idx === track.length - 1) return null
   return track[idx + 1]
 }
 
-// עמודת התאריך הייעודית שיש לעדכן במעבר הספציפי הזה (אם קיימת)
-export function dateColumnForTransition(from: string, to: string): string | null {
-  if (from === 'new' && to === 'cut') return 'date_cut'
-  if (from === 'new' && to === 'ordered_from_supplier') return 'date_sent'
-  if (from === 'ordered_from_supplier' && to === 'arrived') return 'date_returned'
+// Legacy route-specific timestamps do not represent V1 status transitions.
+export function dateColumnForTransition(_from: string, _to: string): string | null {
   return null
 }
 
-// ---------- המיפוי: סטטוס הזמנה → סטטוס פריט מוצע ----------
-// כשמקדמים הזמנה, זה הסטטוס שיוצע לפריטים שלה
-export const ORDER_TO_ITEM_STATUS: Record<string, string | undefined> = {
-  ready: 'new',                    // חדש לביצוע → הפריטים "חדש" (טרם נגזרו)
-  in_production: 'sewing',         // בייצור → הפריטים "במתפרה"
-  ready_for_install: 'ready',      // מוכן → הפריטים "מוכן"
-  completed: 'installed',          // הושלם → הפריטים "הותקן"
+export function canTransitionItemStatus(from: string, to: string): boolean {
+  return nextItemStatus('cutter', from) === to
 }
 
+// ---------- המיפוי: סטטוס הזמנה → סטטוס פריט מוצע ----------
+// V1 item statuses are not synchronized with the legacy order workflow.
+export const ORDER_TO_ITEM_STATUS: Record<string, string | undefined> = {}
+
 // ---------- הכיוון ההפוך: כל הפריטים בסטטוס X → הזמנה מוצעת ----------
-export const ITEM_TO_ORDER_STATUS: Record<string, string | undefined> = {
-  ready: 'ready_for_install',      // כל הפריטים מוכנים → ההזמנה "מוכן"
-  installed: 'completed',          // כל הפריטים הותקנו → ההזמנה "הושלם"
-  sewing: 'in_production',         // כל הפריטים במתפרה → ההזמנה "בייצור"
-  cut: 'in_production',            // כל הפריטים נגזרו → ההזמנה "בייצור"
-}
+export const ITEM_TO_ORDER_STATUS: Record<string, string | undefined> = {}
 
 export const SHADING_LABELS: Record<string, string> = {
   zebra: 'זברה',
@@ -127,14 +128,11 @@ export function getItemRoute(family: string): ItemRoute {
   return family === 'curtain' ? 'cutter' : 'office'
 }
 
-// המקור האמיתי הוא production_route ('internal'/'external') מה-DB.
-// fallback ל-family רק אם השדה חסר (לא אמור לקרות בפריטים חדשים).
+// V1 derives routing from family. Keep the legacy argument for compatibility only.
 export function resolveItemRoute(
-  productionRoute: 'internal' | 'external' | null | undefined,
+  _productionRoute: 'internal' | 'external' | null | undefined,
   family: string
 ): ItemRoute {
-  if (productionRoute === 'internal') return 'cutter'
-  if (productionRoute === 'external') return 'office'
   return getItemRoute(family)
 }
 
@@ -160,7 +158,7 @@ export function calcProgress(items: ItemLike[] = []): ItemProgress {
   const relevant = items.filter(i => i.for_execution && i.item_status !== 'cancelled')
   const total = relevant.length
   const done = relevant.filter(
-    i => i.item_status === 'ready' || i.item_status === 'installed'
+    i => i.item_status === 'ready' || i.item_status === 'done'
   ).length
 
   return {

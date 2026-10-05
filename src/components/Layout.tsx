@@ -2,16 +2,18 @@ import { ReactNode } from 'react'
 import { NavLink } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { useFeature } from '../lib/featureFlags'
+import { Wallet, House, ClipboardList, Package, Factory, PanelsTopLeft, History } from 'lucide-react'
 
-interface NavItem { to: string; label: string; end?: boolean; featureKey?: string }
+interface NavItem { to: string; label: string; end?: boolean; featureKey?: string; icon?: ReactNode }
 
 const navItems: NavItem[] = [
-  { to: '/', label: 'ראשי', end: true, featureKey: 'dashboard' },
-  { to: '/orders', label: 'הזמנות', featureKey: 'orders' },
-  { to: '/items', label: 'פריטים', featureKey: 'items' },
-  { to: '/production', label: 'לוח ייצור - בדיקה', featureKey: 'production' },
-  { to: '/fabrics', label: 'בדים', featureKey: 'fabrics' },
-  { to: '/activity', label: 'יומן פעילות', featureKey: 'activityLog' },
+  { to: '/', label: 'ראשי', end: true, featureKey: 'dashboard', icon: <House size={16} aria-hidden="true" /> },
+  { to: '/orders', label: 'הזמנות', featureKey: 'orders', icon: <ClipboardList size={16} aria-hidden="true" /> },
+  { to: '/collections', label: 'גבייה', icon: <Wallet size={16} aria-hidden="true" /> },
+  { to: '/items', label: 'פריטים', featureKey: 'items', icon: <Package size={16} aria-hidden="true" /> },
+  { to: '/production', label: 'לוח ייצור', featureKey: 'production', icon: <Factory size={16} aria-hidden="true" /> },
+  { to: '/fabrics', label: 'בדים', featureKey: 'fabrics', icon: <PanelsTopLeft size={16} aria-hidden="true" /> },
+  { to: '/activity', label: 'יומן פעילות', featureKey: 'activityLog', icon: <History size={16} aria-hidden="true" /> },
 ]
 
 export default function Layout({ children }: { children: ReactNode }) {
@@ -53,11 +55,11 @@ export default function Layout({ children }: { children: ReactNode }) {
               <NavLink
                 key={item.to} to={item.to} end={item.end}
                 className={({ isActive }) =>
-                  'shrink-0 px-2.5 py-1.5 rounded-md text-sm font-medium transition-colors ' +
+                  'shrink-0 inline-flex items-center gap-1 px-2.5 py-1.5 rounded-md text-sm font-medium transition-colors ' +
                   (isActive ? 'bg-white/20' : 'hover:bg-white/10')
                 }
               >
-                {item.label}
+                {item.icon}{item.label}
               </NavLink>
             ))}
           </nav>

@@ -1,4 +1,5 @@
 import { useState } from 'react'
+import { Wrench, X } from 'lucide-react'
 import { ITEM_STATUS_LABELS, ITEM_STATUS_ORDER } from '../../lib/statusHelpers'
 
 interface Props {
@@ -6,14 +7,15 @@ interface Props {
   onApplyStatus: (status: string) => Promise<void>
   onPrintWork: () => void
   onClear: () => void
+  allowedStatuses: readonly string[]
 }
 
-export default function BulkActionBar({ count, onApplyStatus, onPrintWork, onClear }: Props) {
+export default function BulkActionBar({ count, onApplyStatus, onPrintWork, onClear, allowedStatuses }: Props) {
   const [status, setStatus] = useState('')
   const [busy, setBusy] = useState(false)
 
   const apply = async () => {
-    if (!status) return
+    if (!allowedStatuses.includes(status)) return
     setBusy(true)
     await onApplyStatus(status)
     setStatus('')
@@ -34,24 +36,23 @@ export default function BulkActionBar({ count, onApplyStatus, onPrintWork, onCle
           <select className="input flex-1 min-w-[120px]" value={status}
                   onChange={e => setStatus(e.target.value)}>
             <option value="">שנה סטטוס ל...</option>
-            {ITEM_STATUS_ORDER.map(s => (
+            {ITEM_STATUS_ORDER.filter(s => allowedStatuses.includes(s)).map(s => (
               <option key={s} value={s}>{ITEM_STATUS_LABELS[s]}</option>
             ))}
-            <option value="cancelled">מבוטל</option>
           </select>
 
           <button className="btn-primary shrink-0 text-sm py-2"
-                  disabled={!status || busy} onClick={apply}>
+                  disabled={!allowedStatuses.includes(status) || busy} onClick={apply}>
             {busy ? '...' : 'עדכן'}
           </button>
 
           <button className="btn-ghost shrink-0 text-sm py-2" onClick={onPrintWork}>
-            🔧 הוראות עבודה
+            <Wrench size={16} className="inline-block me-1" aria-hidden="true" /> הוראות עבודה
           </button>
 
           <button className="text-slate-400 hover:text-slate-600 px-2 shrink-0"
                   onClick={onClear} title="נקה בחירה">
-            ✕
+            <X size={16} aria-hidden="true" />
           </button>
         </div>
       </div>

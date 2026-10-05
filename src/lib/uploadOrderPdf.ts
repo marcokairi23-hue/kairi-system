@@ -5,7 +5,7 @@ export async function uploadOrderPdf(orderId: string, pdfBlob: Blob, original = 
 
   const { error } = await supabase.storage
     .from('order-pdfs')
-    .upload(path, pdfBlob, { contentType: 'application/pdf', upsert: true, cacheControl: '0' })
+    .upload(path, pdfBlob, { contentType: 'application/pdf', upsert: !original, cacheControl: '0' })
 
   if (error) {
     throw new Error('שגיאה בהעלאת קובץ ה-PDF: ' + error.message)

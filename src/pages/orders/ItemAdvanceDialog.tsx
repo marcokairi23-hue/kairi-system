@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/auth'
+import { recalculateOrderStatus } from '../../lib/recalculateOrderStatus'
 import {
   ITEM_STATUS_LABELS, resolveItemRoute, nextItemStatus, dateColumnForTransition,
 } from '../../lib/statusHelpers'
@@ -12,6 +13,7 @@ interface AdvanceDialogItem {
   location: string
   production_route: 'internal' | 'external' | null
   item_status: string
+  for_execution: boolean
   assigned_worker: string | null
 }
 
@@ -41,7 +43,7 @@ export default function ItemAdvanceDialog({ open, item, onDone, onClose }: ItemA
     }
   }, [open, item?.assigned_worker])
 
-  if (!open || !item) return null
+  if (!open || !item || !item.id || !item.order_id || !item.for_execution) return null
 
   const route = resolveItemRoute(item.production_route, item.family)
   const next = nextItemStatus(route, item.item_status)
@@ -66,6 +68,7 @@ export default function ItemAdvanceDialog({ open, item, onDone, onClose }: ItemA
       note: 'קידום פריט',
     })
 
+    await recalculateOrderStatus(item.order_id, profile?.id ?? null)
     setSaving(false)
     onDone()
   }

@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { ArrowLeft, Printer, Wrench, MessageCircle, Pencil, ListChecks, CircleCheck, Square, PenLine, TriangleAlert, FileText, Send, Mail } from 'lucide-react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/auth'
@@ -10,11 +11,13 @@ import PaymentModal from './PaymentModal'
 import { getSignatureUrl, getSignatureDataUrl, uploadSignature } from '../../lib/uploadSignature'
 import SignatureModal from '../../components/SignatureModal'
 import { generateOrderPdf } from '../../lib/generateOrderPdf'
-import { uploadOrderPdf } from '../../lib/uploadOrderPdf'
 import {
   ORDER_STATUS_LABELS, ORDER_STATUS_COLORS, ORDER_STATUS_NEXT,
   ITEM_STATUS_LABELS, ITEM_STATUS_COLORS, SHADING_LABELS, calcProgress,
+  getItemRoute, ITEM_ROUTE_LABELS,
+  deriveV1OrderStatus,
 } from '../../lib/statusHelpers'
+import { recalculateOrderStatus } from '../../lib/recalculateOrderStatus'
 
 interface OrderItem {
   id: string
@@ -48,6 +51,11 @@ interface Order {
   id: string
   order_number: number | null
   status: string
+  payment_approved?: boolean | null
+  payment_route?: string | null
+  deposit_requested?: number | null
+  payment_approved_by?: string | null
+  payment_approved_at?: string | null
   is_quote: boolean
   customer_name_snapshot: string
   phone_snapshot: string
@@ -69,6 +77,7 @@ interface Order {
   install_installer_signature_url: string | null
   notes: string | null
   created_at: string
+  customers?: { city: string | null } | null
   profiles?: { full_name: string }
   order_items?: OrderItem[]
   payments?: Payment[]
@@ -83,10 +92,7 @@ export default function OrderDetail() {
   const [order, setOrder] = useState<Order | null>(null)
   const [loading, setLoading] = useState(true)
   const [signatureImgUrl, setSignatureImgUrl] = useState<string | null>(null)
-  const [signatureDataUrl, setSignatureDataUrl] = useState<string | null>(null)
-  const [signatureLoading, setSignatureLoading] = useState(false)
   const [agentSignatureImgUrl, setAgentSignatureImgUrl] = useState<string | null>(null)
-  const [agentSignatureDataUrl, setAgentSignatureDataUrl] = useState<string | null>(null)
   const [updatingStatus, setUpdatingStatus] = useState(false)
   const [showCancelConfirm, setShowCancelConfirm] = useState(false)
   const [tab, setTab] = useState<'details' | 'activity'>('details')
@@ -107,26 +113,28 @@ export default function OrderDetail() {
   const [completionPaymentOpen, setCompletionPaymentOpen] = useState(false)
   const [showCompletedSuggestion, setShowCompletedSuggestion] = useState(false)
   const [reopenConfirmOpen, setReopenConfirmOpen] = useState(false)
+  const [approverName, setApproverName] = useState<string | null>(null)
+  const [selectionError, setSelectionError] = useState<string | null>(null)
+  const legacyUi = false
 
   const load = async () => {
     const { data } = await supabase
       .from('orders')
-      .select('*, profiles!orders_agent_id_fkey(full_name), order_items(*), payments(*)')
+      .select('*, profiles!orders_agent_id_fkey(full_name), customers(city), order_items(*), payments(*)')
       .eq('id', id)
       .single()
-    setOrder(data as Order)
+    setOrder(data ? { ...data, status: deriveV1OrderStatus(data) } as Order : null)
     setLoading(false)
+    setApproverName(null)
+    if (data?.payment_approved_by) {
+      const { data: approver } = await supabase.from('profiles').select('full_name').eq('id', data.payment_approved_by).maybeSingle()
+      setApproverName(approver?.full_name ?? null)
+    }
     if (data?.signature_url) {
-      setSignatureLoading(true)
       getSignatureUrl(data.signature_url).then(setSignatureImgUrl)
-      getSignatureDataUrl(data.signature_url).then((dataUrl) => {
-        setSignatureDataUrl(dataUrl)
-        setSignatureLoading(false)
-      })
     }
     if (data?.agent_signature_url) {
       getSignatureUrl(data.agent_signature_url).then(setAgentSignatureImgUrl)
-      getSignatureDataUrl(data.agent_signature_url).then(setAgentSignatureDataUrl)
     }
     setInstallCustomerSigUrl(null)
     setInstallInstallerSigUrl(null)
@@ -183,15 +191,25 @@ export default function OrderDetail() {
   }
 
   const confirmOfficeSelection = async (selectedIds: Set<string>) => {
-    const items = order.order_items ?? []
-    await Promise.all(items.map(item =>
-      supabase.from('order_items')
-        .update({ for_execution: selectedIds.has(item.id) })
-        .eq('id', item.id)
-    ))
-    setOfficeSelectionOpen(false)
-    setShowProductionSuggestion(true)
-    await load()
+    if (updatingStatus) return
+    setUpdatingStatus(true); setSelectionError(null)
+    try {
+      const items = order.order_items ?? []
+      const results = await Promise.all(items.map(item =>
+        supabase.from('order_items')
+          .update({ for_execution: selectedIds.has(item.id) })
+          .eq('id', item.id)
+      ))
+      const failure = results.find(result => result.error)?.error
+      if (failure) throw failure
+      await recalculateOrderStatus(id!, profile?.id ?? null)
+      setOfficeSelectionOpen(false)
+      await load()
+    } catch (err) {
+      setSelectionError('שגיאה בשמירת הבחירה: ' + (err instanceof Error ? err.message : String(err)))
+    } finally {
+      setUpdatingStatus(false)
+    }
   }
 
   const assignInstaller = async (name: string) => {
@@ -246,16 +264,30 @@ export default function OrderDetail() {
     window.open(`https://wa.me/${phone}?text=${encodeURIComponent(text)}`, '_blank')
   }
 
-  // כפתור זמני: מפיק PDF טרי מהנתונים הנוכחיים ומחליף את הקובץ בקישור הקיים (pdf_url) — אין הפקה אוטומטית יותר בעריכה
-  const syncPdf = async () => {
+  const printCurrentPdf = async () => {
+    if (syncingPdf) return
     setSyncingPdf(true); setSyncError(null)
+    const preview = window.open('', '_blank')
     try {
-      const pdfBlob = await generateOrderPdf({ ...form, signatureDataUrl, agentSignatureDataUrl }, orderNum, true)
-      const pdfUrl = await uploadOrderPdf(id!, pdfBlob)
-      await supabase.from('orders').update({ pdf_url: pdfUrl }).eq('id', id)
-      await load()
+      if (!preview) throw new Error('יש לאפשר חלון חדש כדי לפתוח את ה-PDF')
+      const { data: current, error: readError } = await supabase.from('orders')
+        .select('*, profiles!orders_agent_id_fkey(full_name), customers(city), order_items(*), payments(*)')
+        .eq('id', id).single()
+      if (readError) throw readError
+      if (!current) throw new Error('הזמנה לא נמצאה')
+      const [customerSignature, agentSignature] = await Promise.all([
+        current.signature_url ? getSignatureDataUrl(current.signature_url) : Promise.resolve(null),
+        current.agent_signature_url ? getSignatureDataUrl(current.agent_signature_url) : Promise.resolve(null),
+      ])
+      const pdfBlob = await generateOrderPdf({
+        ...buildFormFromOrder(current), signatureDataUrl: customerSignature, agentSignatureDataUrl: agentSignature,
+      }, current.order_number ?? 'טיוטה', true)
+      const url = URL.createObjectURL(pdfBlob)
+      preview.location.href = url
+      window.setTimeout(() => URL.revokeObjectURL(url), 300_000)
     } catch (err) {
-      setSyncError('שגיאה בסנכרון ה-PDF: ' + (err instanceof Error ? err.message : String(err)))
+      preview?.close()
+      setSyncError('שגיאה בהפקת ה-PDF: ' + (err instanceof Error ? err.message : String(err)))
     } finally {
       setSyncingPdf(false)
     }
@@ -331,11 +363,11 @@ export default function OrderDetail() {
       <div className="flex items-center justify-between mb-4">
         <div>
           <button onClick={() => navigate('/orders')} className="text-sm text-slate-500 hover:text-slate-700 mb-1">
-            ← חזרה
+            <ArrowLeft size={16} className="inline-block me-1" aria-hidden="true" /> חזרה
           </button>
           <h1 className="text-xl font-bold flex items-center gap-2 flex-wrap">
             הזמנה #{orderNum}
-            <span className={`text-xs px-2 py-1 rounded-full font-medium ${ORDER_STATUS_COLORS[order.status] ?? 'bg-slate-100'}`}>
+            <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${ORDER_STATUS_COLORS[order.status] ?? 'bg-slate-100'}`}>
               {ORDER_STATUS_LABELS[order.status] ?? order.status}
             </span>
           </h1>
@@ -372,22 +404,28 @@ export default function OrderDetail() {
       <div className="grid grid-cols-2 gap-2 mb-3">
         <button
           className="btn-ghost text-sm"
-          disabled={signatureLoading}
-          title={signatureLoading ? 'טוען חתימה...' : undefined}
-          onClick={() => printOrder({ ...form, signatureDataUrl, agentSignatureDataUrl }, orderNum, true)}
+          disabled={syncingPdf}
+          onClick={printCurrentPdf}
         >
-          🖨️ הדפס ללקוח
+          <Printer size={16} className="inline-block me-1" aria-hidden="true" /> {syncingPdf ? 'מפיק...' : 'הדפס'}
         </button>
         <button className="btn-ghost text-sm" onClick={() => printOrder(form, orderNum, false)}>
-          🔧 הוראות עבודה
+          <Wrench size={16} className="inline-block me-1" aria-hidden="true" /> הוראות עבודה
         </button>
         <button className="btn-ghost text-sm" onClick={sendWhatsApp}>
-          💬 שלח ב-WhatsApp
+          <MessageCircle size={16} className="inline-block me-1" aria-hidden="true" /> שלח ב-WhatsApp
         </button>
         <button className="btn-ghost text-sm" onClick={() => navigate(`/orders/${id}/edit`)}>
-          ✏️ עריכה
+          <Pencil size={16} className="inline-block me-1" aria-hidden="true" /> עריכה
         </button>
       </div>
+
+      {syncError && <p role="alert" className="text-red-600 text-sm mb-3">{syncError}</p>}
+      {order.pdf_url_original && (
+        <a href={order.pdf_url_original} target="_blank" rel="noreferrer" className="btn-ghost text-sm inline-flex items-center gap-1 mb-3">
+          <FileText size={16} aria-hidden="true" /> PDF מקור
+        </a>
+      )}
 
       {/* עדכון סטטוס */}
       {order.status !== 'completed' && order.status !== 'cancelled' && (
@@ -396,11 +434,11 @@ export default function OrderDetail() {
             סטטוס: <strong>{ORDER_STATUS_LABELS[order.status]}</strong>
           </div>
           <div className="flex gap-2">
-            {order.status === 'pending_payment' ? (
-              <button className="btn-primary text-sm py-1.5" onClick={() => setOfficeSelectionOpen(true)}>
-                🎯 בחירה סופית
+            {order.status === 'waiting_payment' ? (
+              <button className="btn-primary text-sm py-1.5" disabled={updatingStatus} onClick={() => setOfficeSelectionOpen(true)}>
+                <ListChecks size={16} className="inline-block me-1" aria-hidden="true" /> בחירה סופית
               </button>
-            ) : order.status === 'ready_for_install' ? (
+            ) : legacyUi && order.status === 'ready_for_install' ? (
               <select
                 className="input text-sm py-1.5"
                 value={order.installer_name ?? ''}
@@ -409,18 +447,13 @@ export default function OrderDetail() {
                 <option value="">שיוך מתקין...</option>
                 {installers.map(name => <option key={name} value={name}>{name}</option>)}
               </select>
-            ) : nextStatus && (
-              <button className="btn-primary text-sm py-1.5" disabled={updatingStatus} onClick={advanceStatus}>
-                {updatingStatus ? '...' : `← ${ORDER_STATUS_LABELS[nextStatus]}`}
-              </button>
-            )}
-            <button className="text-xs text-red-400 hover:text-red-600 px-2" onClick={() => setShowCancelConfirm(true)}>
-              ביטול
-            </button>
+            ) : null}
           </div>
         </div>
       )}
 
+      {selectionError && <p role="alert" className="text-red-600 text-sm mb-3">{selectionError}</p>}
+      {legacyUi && <>
       {showProductionSuggestion && order.status === 'pending_payment' && (
         <div className="mb-3">
           <StatusSuggestionBanner
@@ -451,24 +484,24 @@ export default function OrderDetail() {
           <div className="grid grid-cols-2 gap-3">
             <div>
               <div className="text-sm mb-1">
-                {installCustomerSigUrl ? '✅ חתימת לקוח' : '⬜ חתימת לקוח'}
+                {installCustomerSigUrl ? <CircleCheck size={16} className="inline-block me-1" aria-hidden="true" /> : <Square size={16} className="inline-block me-1" aria-hidden="true" />} חתימת לקוח
               </div>
               {installCustomerSigUrl && (
                 <img src={installCustomerSigUrl} alt="חתימת לקוח" className="h-16 rounded border mb-2" />
               )}
               <button className="btn-ghost text-sm" onClick={() => setInstallCustomerSigOpen(true)}>
-                ✍️ {installCustomerSigUrl ? 'חתום מחדש' : 'חתימה'}
+                <PenLine size={16} className="inline-block me-1" aria-hidden="true" /> {installCustomerSigUrl ? 'חתום מחדש' : 'חתימה'}
               </button>
             </div>
             <div>
               <div className="text-sm mb-1">
-                {installInstallerSigUrl ? '✅ חתימת מתקין' : '⬜ חתימת מתקין'}
+                {installInstallerSigUrl ? <CircleCheck size={16} className="inline-block me-1" aria-hidden="true" /> : <Square size={16} className="inline-block me-1" aria-hidden="true" />} חתימת מתקין
               </div>
               {installInstallerSigUrl && (
                 <img src={installInstallerSigUrl} alt="חתימת מתקין" className="h-16 rounded border mb-2" />
               )}
               <button className="btn-ghost text-sm" onClick={() => setInstallInstallerSigOpen(true)}>
-                ✍️ {installInstallerSigUrl ? 'חתום מחדש' : 'חתימה'}
+                <PenLine size={16} className="inline-block me-1" aria-hidden="true" /> {installInstallerSigUrl ? 'חתום מחדש' : 'חתימה'}
               </button>
             </div>
           </div>
@@ -498,10 +531,10 @@ export default function OrderDetail() {
           <div className="text-sm font-medium mb-3">האם ההתקנה הושלמה בהצלחה?</div>
           <div className="flex gap-2">
             <button className="btn-primary flex-1" onClick={markInstallSuccess}>
-              ✅ כן, הושלמה
+              <CircleCheck size={16} className="inline-block me-1" aria-hidden="true" /> כן, הושלמה
             </button>
             <button className="btn-ghost flex-1 text-red-500" onClick={() => setReopenConfirmOpen(true)}>
-              ⚠️ לא — פתיחת טיפול
+              <TriangleAlert size={16} className="inline-block me-1" aria-hidden="true" /> לא — פתיחת טיפול
             </button>
           </div>
         </div>
@@ -547,6 +580,7 @@ export default function OrderDetail() {
           onSaved={() => { setCompletionPaymentOpen(false); setShowCompletedSuggestion(true); load() }}
         />
       )}
+      </>}
 
       {/* פרטי לקוח */}
       <div className="card p-4 mb-3">
@@ -554,43 +588,20 @@ export default function OrderDetail() {
         <div className="font-bold text-lg">{order.customer_name_snapshot}</div>
         <a href={`tel:${order.phone_snapshot}`} className="text-brand text-sm font-medium">{order.phone_snapshot}</a>
         {order.address_snapshot && <div className="text-slate-500 text-sm mt-1">{order.address_snapshot}</div>}
+        {order.customers?.city && <div className="text-slate-500 text-sm mt-1">עיר: {order.customers.city}</div>}
       </div>
 
       {/* קישור PDF ציבורי */}
       {order.pdf_url && (
         <div className="card p-4 mb-3">
-          {order.pdf_url_original && (
-            <div className="flex items-center justify-between gap-3 mb-3 pb-3 border-b border-slate-100">
-              <div className="text-sm min-w-0">
-                <div className="text-xs font-bold text-slate-500 mb-1">PDF מקור (קפוא לצמיתות)</div>
-                <a href={order.pdf_url_original} target="_blank" rel="noreferrer" className="text-brand underline break-all">
-                  {order.pdf_url_original}
-                </a>
-              </div>
-              <button
-                className="btn-ghost text-sm shrink-0"
-                onClick={() => navigator.clipboard.writeText(order.pdf_url_original!)}
-              >
-                העתק קישור
-              </button>
-            </div>
-          )}
           <div className="flex items-center justify-between gap-3 mb-3">
             <div className="text-sm min-w-0">
-              <div className="text-xs font-bold text-slate-500 mb-1">PDF חי (מסונכרן)</div>
+              <div className="text-xs font-bold text-slate-500 mb-1">PDF שנשמר ביצירת ההזמנה</div>
               <a href={order.pdf_url} target="_blank" rel="noreferrer" className="text-brand underline break-all">
                 {order.pdf_url}
               </a>
             </div>
             <div className="flex gap-2 shrink-0">
-              <button
-                className="btn-ghost text-sm"
-                disabled={syncingPdf}
-                onClick={syncPdf}
-                title="מפיק PDF טרי מהנתונים הנוכחיים של ההזמנה ומחליף את הקובץ בקישור הקיים"
-              >
-                {syncingPdf ? 'מסנכרן...' : '🔄 סנכרן PDF'}
-              </button>
               <button
                 className="btn-ghost text-sm"
                 onClick={() => navigator.clipboard.writeText(order.pdf_url!)}
@@ -599,23 +610,22 @@ export default function OrderDetail() {
               </button>
             </div>
           </div>
-          {syncError && <div className="text-red-600 text-xs mb-3">{syncError}</div>}
 
-          <div className="text-xs font-bold text-slate-500 mb-2">שליחת PDF ללקוח — בדיקת 3 שיטות</div>
-          <div className="grid grid-cols-3 gap-2">
+          <div className="text-xs font-bold text-slate-500 mb-2">שליחת PDF שנשמר ללקוח</div>
+          <div className="grid grid-cols-2 gap-2">
             <button className="btn-ghost text-sm" onClick={sendPdfLinkWhatsApp}>
-              💬 שיטה 1: קישור ב-WhatsApp
+              <MessageCircle size={16} className="inline-block me-1" aria-hidden="true" /> קישור ב-WhatsApp
             </button>
             <button className="btn-ghost text-sm" disabled={sharingPdf} onClick={sharePdfFile}>
-              {sharingPdf ? 'טוען...' : '📤 שיטה 2: שיתוף קובץ'}
+              {sharingPdf ? 'טוען...' : <><Send size={16} className="inline-block me-1" aria-hidden="true" /> שיתוף קובץ</>}
             </button>
-            <button className="btn-ghost text-sm" disabled={sendingMake} onClick={sendPdfViaMake}>
-              {sendingMake ? 'שולח...' : '📨 שיטה 3: Make/ManyChat'}
-            </button>
+            {legacyUi && <button className="btn-ghost text-sm" disabled={sendingMake} onClick={sendPdfViaMake}>
+              {sendingMake ? 'שולח...' : <><Mail size={16} className="inline-block me-1" aria-hidden="true" /> שיטה 3: Make/ManyChat</>}
+            </button>}
           </div>
           {shareError && <div className="text-red-600 text-xs mt-2">{shareError}</div>}
-          {makeResult === 'ok' && <div className="text-green-700 text-xs mt-2">נשלח ל-Make בהצלחה — בדוק ב-Execution history / בוואטסאפ של הלקוח.</div>}
-          {makeResult === 'error' && <div className="text-red-600 text-xs mt-2">שגיאה בשליחה ל-Make. בדוק את VITE_MAKE_WEBHOOK_URL וש-.env.local נטען (הפעל מחדש את שרת ה-dev אם שינית עכשיו).</div>}
+          {legacyUi && makeResult === 'ok' && <div className="text-green-700 text-xs mt-2">נשלח ל-Make בהצלחה — בדוק ב-Execution history / בוואטסאפ של הלקוח.</div>}
+          {legacyUi && makeResult === 'error' && <div className="text-red-600 text-xs mt-2">שגיאה בשליחה ל-Make. בדוק את VITE_MAKE_WEBHOOK_URL וש-.env.local נטען (הפעל מחדש את שרת ה-dev אם שינית עכשיו).</div>}
         </div>
       )}
 
@@ -629,7 +639,7 @@ export default function OrderDetail() {
               : prog.isPartial ? 'text-amber-700'
               : 'text-slate-500'
             }`}>
-              {prog.isPartial && '⚠️ '}{prog.label}
+              {prog.isPartial && <TriangleAlert size={16} className="inline-block me-1" aria-hidden="true" />}{prog.label}
             </span>
           </div>
           <div className="h-2 bg-slate-100 rounded-full overflow-hidden">
@@ -642,7 +652,7 @@ export default function OrderDetail() {
         </div>
       )}
 
-      {order.status === 'in_production' && prog.isComplete && (
+      {legacyUi && order.status === 'in_production' && prog.isComplete && (
         <div className="mb-3">
           <StatusSuggestionBanner
             orderId={id!}
@@ -664,10 +674,12 @@ export default function OrderDetail() {
                 <div className="flex justify-between items-start gap-2">
                   <span className="font-semibold">{i + 1}. {item.location}</span>
                   <div className="flex items-center gap-2 shrink-0">
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${
+                    {item.for_execution && <span className="text-xs font-medium">לביצוע</span>}
+                    {item.for_execution && <span className="text-xs text-slate-500">{ITEM_ROUTE_LABELS[getItemRoute(item.family)]}</span>}
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                       ITEM_STATUS_COLORS[item.item_status] ?? 'bg-slate-100'
                     }`}>
-                      {ITEM_STATUS_LABELS[item.item_status] ?? item.item_status}
+                      {item.for_execution ? (ITEM_STATUS_LABELS[item.item_status] ?? 'סטטוס מורשת') : 'הצעת מחיר / לא לביצוע'}
                     </span>
                     <span className="font-bold text-brand">₪{item.price.toLocaleString()}</span>
                   </div>
@@ -678,7 +690,7 @@ export default function OrderDetail() {
                   <span>תפירה: {item.sewing_type}</span>
                   {item.shtaif_cm != null && <span>שטייף: {item.shtaif_cm}</span>}
                   {item.hem_cm != null && <span>מכפלת: {item.hem_cm}</span>}
-                  {item.is_split && <span>✓ חצוי</span>}
+                  {item.is_split && <span><CircleCheck size={14} className="inline-block me-1" aria-hidden="true" /> חצוי</span>}
                   {item.fabric_text && <span>בד: {item.fabric_text}</span>}
                 </div>
                 {item.notes && <div className="text-slate-400 text-xs mt-1">{item.notes}</div>}
@@ -700,10 +712,12 @@ export default function OrderDetail() {
                     {i + 1}. {SHADING_LABELS[item.subtype ?? ''] ?? item.subtype} — {item.location}
                   </span>
                   <div className="flex items-center gap-2 shrink-0">
-                    <span className={`text-xs px-2 py-0.5 rounded-full ${
+                    {item.for_execution && <span className="text-xs font-medium">לביצוע</span>}
+                    {item.for_execution && <span className="text-xs text-slate-500">{ITEM_ROUTE_LABELS[getItemRoute(item.family)]}</span>}
+                    <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                       ITEM_STATUS_COLORS[item.item_status] ?? 'bg-slate-100'
                     }`}>
-                      {ITEM_STATUS_LABELS[item.item_status] ?? item.item_status}
+                      {item.for_execution ? (ITEM_STATUS_LABELS[item.item_status] ?? 'סטטוס מורשת') : 'הצעת מחיר / לא לביצוע'}
                     </span>
                     <span className="font-bold text-brand">₪{item.price.toLocaleString()}</span>
                   </div>
@@ -730,8 +744,13 @@ export default function OrderDetail() {
           {order.discount > 0 && <div className="flex justify-between text-slate-500"><span>הנחה</span><span>− ₪{order.discount.toLocaleString()}</span></div>}
           {order.installation_fee > 0 && <div className="flex justify-between text-slate-400 text-xs"><span>התקנה (בנפרד)</span><span>₪{order.installation_fee.toLocaleString()}</span></div>}
           <div className="flex justify-between font-bold text-base border-t pt-2"><span>סה״כ לתשלום</span><span>₪{order.final_total.toLocaleString()}</span></div>
+          <div className="flex justify-between"><span>מקדמה לתשלום</span><span>₪{Number(order.deposit_requested ?? 0).toLocaleString()}</span></div>
+          <div className="flex justify-between"><span>מסלול תשלום</span><span>{{ cash: 'מזומן', check: 'צ׳ק', credit_card: 'אשראי', bank_transfer: 'העברה בנקאית', quote: 'הצעת מחיר' }[order.payment_route ?? ''] ?? 'לא צוין'}</span></div>
+          <div className="flex justify-between"><span>אישור תשלום</span><span>{order.payment_approved === true ? 'מאושר' : order.payment_route === 'quote' ? 'הצעת מחיר — ללא אישור תשלום' : ['credit_card', 'bank_transfer'].includes(order.payment_route ?? '') ? 'ממתין לאישור משרד' : 'ממתין לאישור תקבול'}</span></div>
+          {order.payment_approved === true && order.payment_approved_by && <div className="flex justify-between"><span>מאשר התשלום</span><span>{approverName ?? order.payment_approved_by}</span></div>}
+          {order.payment_approved === true && order.payment_approved_at && <div className="flex justify-between"><span>מועד אישור</span><span>{new Date(order.payment_approved_at).toLocaleString('he-IL')}</span></div>}
           {paid > 0 && <div className="flex justify-between text-green-700"><span>שולם</span><span>₪{paid.toLocaleString()}</span></div>}
-          {remaining > 0 && <div className="flex justify-between text-amber-700 font-semibold"><span>נשאר</span><span>₪{remaining.toLocaleString()}</span></div>}
+          <div className="flex justify-between text-amber-700 font-semibold"><span>יתרה לתשלום</span><span>₪{remaining.toLocaleString()}</span></div>
         </div>
       </div>
 

@@ -1,4 +1,5 @@
 import { ORDER_STATUS_LABELS, ITEM_STATUS_LABELS } from '../../lib/statusHelpers'
+import { CircleCheck } from 'lucide-react'
 
 interface Props {
   orderNumber: number | string
@@ -20,7 +21,7 @@ export default function SyncOrderDialog({
          onClick={onCancel}>
       <div className="bg-white rounded-2xl p-6 w-full max-w-sm"
            onClick={e => e.stopPropagation()}>
-        <h3 className="font-bold text-lg mb-1">✓ כל הפריטים עודכנו</h3>
+        <h3 className="font-bold text-lg mb-1"><CircleCheck size={18} className="inline-block me-1" aria-hidden="true" /> כל הפריטים עודכנו</h3>
         <p className="text-sm text-slate-500 mb-4">
           הזמנה #{orderNumber} — {customerName}
         </p>

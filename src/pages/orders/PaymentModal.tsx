@@ -3,6 +3,7 @@ import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/auth'
 import { PAYMENT_METHODS } from './types'
 import { fmt } from '../../lib/statusHelpers'
+import { recalculateOrderStatus } from '../../lib/recalculateOrderStatus'
 
 interface Props {
   orderId: string
@@ -24,8 +25,10 @@ export default function PaymentModal({
   const [note, setNote] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [paymentSaved, setPaymentSaved] = useState(false)
 
   const save = async () => {
+    if (paymentSaved) return
     const value = parseFloat(amount)
     if (!value || value <= 0) {
       setError('יש להזין סכום גדול מאפס')
@@ -47,6 +50,14 @@ export default function PaymentModal({
       return
     }
 
+    setPaymentSaved(true)
+    try {
+      await recalculateOrderStatus(orderId, profile?.id ?? null)
+    } catch {
+      setError('התשלום נשמר, אך עדכון סטטוס ההזמנה נכשל. יש לרענן ולבדוק את ההזמנה לפני הוספת תשלום נוסף.')
+      setBusy(false)
+      return
+    }
     onSaved()
     onClose()
   }
@@ -104,7 +115,7 @@ export default function PaymentModal({
         {error && <div className="text-red-600 text-sm mt-3">{error}</div>}
 
         <div className="flex gap-2 mt-5">
-          <button className="btn-primary flex-1" disabled={busy} onClick={save}>
+          <button className="btn-primary flex-1" disabled={busy || paymentSaved} onClick={save}>
             {busy ? 'שומר...' : 'שמור תשלום'}
           </button>
           <button className="btn-ghost" onClick={onClose}>ביטול</button>

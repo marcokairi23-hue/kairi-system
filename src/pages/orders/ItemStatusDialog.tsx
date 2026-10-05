@@ -3,9 +3,10 @@ import { Printer } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/auth'
 import {
-  ITEM_STATUS_LABELS, ITEM_STATUS_COLORS, ITEM_STATUS_ORDER, SHADING_LABELS,
+  ITEM_STATUS_LABELS, ITEM_STATUS_COLORS, ITEM_STATUS_ORDER, SHADING_LABELS, canTransitionItemStatus,
 } from '../../lib/statusHelpers'
 import { printWorkOrder } from '../items/printWork'
+import { recalculateOrderStatus } from '../../lib/recalculateOrderStatus'
 
 export interface DialogItem {
   id: string
@@ -46,7 +47,11 @@ export default function ItemStatusDialog({
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  const active = items.filter(i => i.item_status !== 'cancelled')
+  const active = items.filter(i => orderId && i.id && i.for_execution && ITEM_STATUS_ORDER.some(s => s === i.item_status))
+  const allowedStatuses = ITEM_STATUS_ORDER.filter(status => selected.size > 0 && Array.from(selected).every(id => {
+    const item = active.find(i => i.id === id)
+    return !!item && canTransitionItemStatus(item.item_status, status)
+  }))
   const allSelected = active.length > 0 && selected.size === active.length
 
   const toggle = (id: string) => {
@@ -60,7 +65,7 @@ export default function ItemStatusDialog({
   }
 
   const apply = async () => {
-    if (!newStatus || selected.size === 0) return
+    if (!allowedStatuses.some(s => s === newStatus)) return
     setBusy(true); setError(null)
 
     const ids = Array.from(selected)
@@ -87,6 +92,13 @@ export default function ItemStatusDialog({
       }))
     )
 
+    try {
+      await recalculateOrderStatus(orderId, profile?.id ?? null)
+    } catch {
+      setError('הפריטים עודכנו, אך חישוב סטטוס ההזמנה נכשל. יש לרענן את ההזמנה.')
+      setBusy(false)
+      return
+    }
     onSaved()
     onClose()
   }
@@ -169,7 +181,7 @@ export default function ItemStatusDialog({
                   {item.width_m} × {item.heights_m.join('/')} מ׳
                 </div>
               </div>
-              <span className={`text-xs px-2 py-0.5 rounded-full shrink-0 ${
+              <span className={`text-xs px-2 py-0.5 rounded-full font-medium shrink-0 ${
                 ITEM_STATUS_COLORS[item.item_status] ?? 'bg-slate-100'
               }`}>
                 {ITEM_STATUS_LABELS[item.item_status] ?? item.item_status}
@@ -187,13 +199,12 @@ export default function ItemStatusDialog({
                     onChange={e => setNewStatus(e.target.value)}
                     disabled={selected.size === 0}>
               <option value="">שנה סטטוס ל...</option>
-              {ITEM_STATUS_ORDER.map(s => (
+              {allowedStatuses.map(s => (
                 <option key={s} value={s}>{ITEM_STATUS_LABELS[s]}</option>
               ))}
-              <option value="cancelled">מבוטל</option>
             </select>
             <button className="btn-primary shrink-0"
-                    disabled={busy || !newStatus || selected.size === 0}
+                    disabled={busy || !allowedStatuses.some(s => s === newStatus)}
                     onClick={apply}>
               {busy ? '...' : `עדכן (${selected.size})`}
             </button>

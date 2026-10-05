@@ -6,6 +6,8 @@ export interface SelectableItem {
   family: 'curtain' | 'shading'
   location: string
   subtype?: string
+  width_m?: string
+  fabric_color?: string
   price: number
   for_execution: boolean
 }
@@ -93,7 +95,16 @@ export default function ItemSelectionDialog({
                     checked={selected.has(item.id)}
                     onChange={() => toggle(item.id)}
                   />
-                  {itemLabel(item)}
+                  <span>
+                    {item.width_m !== undefined && <span className="text-xs text-slate-500 block">{item.family === 'curtain' ? 'וילון' : (item.subtype && SHADING_LABELS[item.subtype]) || item.subtype || 'הצללה'}</span>}
+                    {itemLabel(item)}
+                    {(item.width_m !== undefined || item.fabric_color) && (
+                      <span className="text-xs text-slate-500 block">
+                        {item.width_m !== undefined && `רוחב: ${item.width_m || '—'} מ׳`}
+                        {item.fabric_color && ` · בד/צבע: ${item.fabric_color}`}
+                      </span>
+                    )}
+                  </span>
                 </span>
                 <span className="text-slate-500">₪{(item.price || 0).toLocaleString()}</span>
               </label>

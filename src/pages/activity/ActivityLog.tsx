@@ -87,7 +87,7 @@ export async function fetchActivity(opts: {
   if (wantPayment) {
     let q = supabase
       .from('payments')
-      .select('*, profiles(full_name), orders(order_number)')
+      .select('*, profiles!payments_received_by_fkey(full_name), orders(order_number)')
       .order('paid_at', { ascending })
     if (orderId) q = q.eq('order_id', orderId)
     if (userId) q = q.eq('received_by', userId)

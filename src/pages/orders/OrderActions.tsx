@@ -1,13 +1,14 @@
 import { useNavigate } from 'react-router-dom'
-import { Printer, Wrench, MessageCircle, Pencil, Wallet, ClipboardList, ArrowLeft } from 'lucide-react'
+import { Printer, Wrench, MessageCircle, Pencil, Wallet, ClipboardList } from 'lucide-react'
 import { printOrder, buildFormFromOrder } from './printOrder'
 import { getSignatureDataUrl } from '../../lib/uploadSignature'
-import { ORDER_STATUS_NEXT, ORDER_STATUS_LABELS, SHADING_LABELS, fmt } from '../../lib/statusHelpers'
+import { ACTIVE_ORDER_STATUSES, SHADING_LABELS, fmt } from '../../lib/statusHelpers'
 
 export interface ActionOrder {
   id: string
   order_number: number | null
   status: string
+  payment_approved?: boolean | null
   customer_name_snapshot: string
   phone_snapshot: string
   address_snapshot: string
@@ -54,14 +55,13 @@ interface Props {
 }
 
 export default function OrderActions({
-  order, compact = false, onPayment, onItemStatus, onAdvance,
+  order, compact = false, onPayment, onItemStatus,
 }: Props) {
   const navigate = useNavigate()
 
   const orderNum = order.order_number ?? 'טיוטה'
   const paid = (order.payments ?? []).reduce((s, p) => s + p.amount, 0)
   const remaining = order.final_total - paid
-  const nextStatus = ORDER_STATUS_NEXT[order.status]
 
   const stop = (e: React.MouseEvent) => { e.preventDefault(); e.stopPropagation() }
 
@@ -136,22 +136,13 @@ ${paid > 0 ? `שולם: ${fmt(paid)}\nנשאר: ${fmt(remaining)}` : ''}
         <Wallet className={icon} />{!compact && <span className="text-xs">תשלום</span>}
       </button>
 
-      {/* מוצג בדיוק כמו "קדם" (nextStatus קיים) — כדי לבחון אותו כתחלופה מעשית לקידום
-          סטטוס ההזמנה, כולל בשני הסטטוסים שבהם רק "קדם" הופיע עד כה: quote/pending_payment. */}
-      {nextStatus && (
+      {ACTIVE_ORDER_STATUSES.includes(order.status) && (
         <button className={btn} title="פריטים בהזמנה"
                 onClick={e => { stop(e); onItemStatus() }}>
           <ClipboardList className={icon} />{!compact && <span className="text-xs">פריטים</span>}
         </button>
       )}
 
-      {nextStatus && (
-        <button className={btn}
-                title={`קדם ל: ${ORDER_STATUS_LABELS[nextStatus]}`}
-                onClick={e => { stop(e); onAdvance() }}>
-          <ArrowLeft className={icon} />{!compact && <span className="text-xs">קדם</span>}
-        </button>
-      )}
     </div>
   )
 }

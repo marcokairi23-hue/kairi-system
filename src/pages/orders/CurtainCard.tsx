@@ -1,7 +1,11 @@
 import { CurtainItem, SEWING_TYPES, ITEM_STATUSES } from './types'
+import { canTransitionItemStatus } from '../../lib/statusHelpers'
 import { Field } from './FormFields'
+import { useId, useState } from 'react'
 
 interface Props {
+  creationMode?: boolean
+  editMode?: boolean
   item: CurtainItem
   index: number
   onChange: (item: CurtainItem) => void
@@ -9,8 +13,19 @@ interface Props {
   sewingTypes?: string[]
 }
 
-export default function CurtainCard({ item, index, onChange, onRemove, sewingTypes = SEWING_TYPES }: Props) {
+export default function CurtainCard({ item, index, onChange, onRemove, creationMode = false, editMode = false, sewingTypes = SEWING_TYPES }: Props) {
   const set = (k: keyof CurtainItem, v: unknown) => onChange({ ...item, [k]: v })
+  const [widthBlurred, setWidthBlurred] = useState(false)
+  const [heightBlurred, setHeightBlurred] = useState(false)
+  const errorId = useId()
+  const dimensionMode = creationMode || editMode
+  const numericValue = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/
+  const width = item.width_m.trim()
+  const widthInvalid = dimensionMode && widthBlurred && (!numericValue.test(width) || !Number.isFinite(Number(width)) || Number(width) < 0.3 || Number(width) > 10)
+  const heightInvalid = dimensionMode && heightBlurred && item.heights_m.split(',').some(value => {
+    const height = value.trim()
+    return !numericValue.test(height) || !Number.isFinite(Number(height)) || Number(height) <= 0 || Number(height) > 6
+  })
 
   return (
     <div className="border border-purple-200 rounded-lg bg-white overflow-hidden mb-3">
@@ -23,11 +38,11 @@ export default function CurtainCard({ item, index, onChange, onRemove, sewingTyp
           )}
         </div>
         <div className="flex items-center gap-3">
-          <label className="flex items-center gap-1 text-xs text-slate-600">
+          {!creationMode && !editMode && <label className="flex items-center gap-1 text-xs text-slate-600">
             <input type="checkbox" checked={item.for_execution}
                    onChange={e => set('for_execution', e.target.checked)} />
             לביצוע
-          </label>
+          </label>}
           <button onClick={onRemove} className="text-red-400 hover:text-red-600 text-lg leading-none">×</button>
         </div>
       </div>
@@ -40,14 +55,22 @@ export default function CurtainCard({ item, index, onChange, onRemove, sewingTyp
         </Field>
 
         <Field label="רוחב (מ׳)" required>
-          <input className="input" type="number" min="0" step="0.01" dir="ltr" value={item.width_m}
+          <input className={`input${widthInvalid ? ' border-red-500 ring-1 ring-red-500' : ''}`} type={dimensionMode ? 'text' : 'number'} inputMode={dimensionMode ? 'decimal' : undefined} required={dimensionMode} min={dimensionMode ? "0.30" : "0"} max={dimensionMode ? "10.00" : undefined} step="0.01" dir="ltr" value={item.width_m}
+                 onBlur={() => { if (dimensionMode) setWidthBlurred(true) }}
+                 aria-invalid={widthInvalid || undefined} aria-describedby={widthInvalid ? `${errorId}-width` : undefined}
                  onChange={e => set('width_m', e.target.value)} />
+          {widthInvalid && <p id={`${errorId}-width`} role="alert" className="text-xs text-red-600 mt-1">הרוחב חייב להיות מספר בין 0.30 ל־10.00 מטר</p>}
+          {dimensionMode && <p className="text-xs text-slate-500 mt-1">רוחב בין 0.30 ל-10.00 מטר</p>}
         </Field>
 
         <Field label="גובה/ים (מ׳)" required>
-          <input className="input" dir="ltr" value={item.heights_m}
+          <input className={`input${heightInvalid ? ' border-red-500 ring-1 ring-red-500' : ''}`} required={dimensionMode} dir="ltr" value={item.heights_m}
+                 onBlur={() => { if (dimensionMode) setHeightBlurred(true) }}
+                 aria-invalid={heightInvalid || undefined} aria-describedby={heightInvalid ? `${errorId}-height` : undefined}
                  onChange={e => set('heights_m', e.target.value)}
                  placeholder="3.06 או 3.06,3.07,3.06" />
+          {heightInvalid && <p id={`${errorId}-height`} role="alert" className="text-xs text-red-600 mt-1">כל גובה חייב להיות מספר גדול מ־0 ועד 6.00 מטר, ללא ערכים ריקים</p>}
+          {dimensionMode && <p className="text-xs text-slate-500 mt-1">כל גובה גדול מ-0 ועד 6.00 מטר, מופרד בפסיקים</p>}
         </Field>
 
         <Field label="סוג תפירה">
@@ -73,12 +96,12 @@ export default function CurtainCard({ item, index, onChange, onRemove, sewingTyp
                  placeholder="שם הבד / קוד" />
         </Field>
 
-        <Field label="סטטוס">
+        {!creationMode && item.db_id && item.for_execution && ITEM_STATUSES.some(s => s.value === item.item_status) && <Field label="סטטוס">
           <select className="input" value={item.item_status}
-                  onChange={e => set('item_status', e.target.value as CurtainItem['item_status'])}>
-            {ITEM_STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                  onChange={e => { if (canTransitionItemStatus(item.item_status, e.target.value)) set('item_status', e.target.value as CurtainItem['item_status']) }}>
+            {ITEM_STATUSES.filter(s => s.value === item.item_status || canTransitionItemStatus(item.item_status, s.value)).map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
           </select>
-        </Field>
+        </Field>}
 
         <Field label="עלות (₪)" required>
           <input className="input font-bold" type="number" min="0" dir="ltr" value={item.price}
@@ -86,11 +109,21 @@ export default function CurtainCard({ item, index, onChange, onRemove, sewingTyp
         </Field>
 
         <div className="col-span-2 sm:col-span-3 flex items-center gap-4">
-          <label className="flex items-center gap-1 text-xs text-slate-600">
+          {dimensionMode ? (
+            <div role="group" aria-label="חלוקת וילון" className="inline-flex rounded-lg border border-purple-200 overflow-hidden">
+              {[false, true].map(split => (
+                <button key={String(split)} type="button" aria-pressed={item.is_split === split}
+                        onClick={() => set('is_split', split)}
+                        className={`px-4 py-2 text-xs font-medium ${item.is_split === split ? 'bg-purple-100 text-purple-700' : 'bg-white text-slate-600 hover:bg-purple-50'}`}>
+                  {split ? 'חצוי' : 'לא חצוי'}
+                </button>
+              ))}
+            </div>
+          ) : <label className="flex items-center gap-1 text-xs text-slate-600">
             <input type="checkbox" checked={item.is_split}
                    onChange={e => set('is_split', e.target.checked)} />
             חצוי (נפתח מהאמצע)
-          </label>
+          </label>}
         </div>
 
         <Field label="הערות" className="col-span-2 sm:col-span-3">

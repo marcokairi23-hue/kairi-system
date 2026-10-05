@@ -4,13 +4,14 @@ import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/auth'
 import BulkActionBar from './BulkActionBar'
 import {
-  ITEM_STATUS_LABELS, ITEM_STATUS_COLORS, ITEM_STATUS_ORDER, SHADING_LABELS,
-  ITEM_ROUTE_LABELS, ItemRoute, resolveItemRoute, nextItemStatus, ACTIVE_ORDER_STATUSES,
+  ITEM_STATUS_LABELS, ITEM_STATUS_COLORS, ITEM_STATUS_ORDER, SHADING_LABELS, canTransitionItemStatus,
+  ITEM_ROUTE_LABELS, ItemRoute, getItemRoute, ACTIVE_ORDER_STATUSES,
 } from '../../lib/statusHelpers'
 import { printWorkOrder } from './printWork'
 import SyncOrderDialog from '../orders/SyncOrderDialog'
 import ItemAdvanceDialog from '../orders/ItemAdvanceDialog'
 import { suggestOrderStatus } from '../../lib/statusHelpers'
+import { recalculateOrderStatus } from '../../lib/recalculateOrderStatus'
 
 interface Item {
   id: string
@@ -47,10 +48,9 @@ interface Item {
 const TABS: { key: string; label: string; statuses: string[] }[] = [
   { key: 'all',       label: 'הכל',      statuses: [] },
   { key: 'new',       label: 'חדש',      statuses: ['new'] },
-  { key: 'cut',       label: 'נגזר',     statuses: ['cut'] },
-  { key: 'sewing',    label: 'בתפירה',   statuses: ['sewing'] },
+  { key: 'preparation', label: 'בהכנה', statuses: ['preparation'] },
   { key: 'ready',     label: 'מוכן',     statuses: ['ready'] },
-  { key: 'installed', label: 'הותקן',    statuses: ['installed'] },
+  { key: 'done',      label: 'הושלם',   statuses: ['done'] },
 ]
 
 // קיבוץ מסך הפריטים — ניתן להרחיב בהמשך (סוג תפירה/בד/סוכן וכו', לא עכשיו)
@@ -101,7 +101,8 @@ export default function ItemsList() {
     // הזמנה עדיין לא פעילה (draft/quote/pending_payment/cancelled) — הפריט לא אמור להופיע
     // כאן עד שההזמנה יצאה מגבייה בפועל (DEFECTS_MAP #20).
     const active = ((data ?? []) as Item[]).filter(i =>
-      ACTIVE_ORDER_STATUSES.includes(i.orders?.status ?? ''))
+      i.id && i.order_id && i.for_execution && ['curtain', 'shading'].includes(i.family) &&
+      ITEM_STATUS_ORDER.some(status => status === i.item_status) && ACTIVE_ORDER_STATUSES.includes(i.orders?.status ?? ''))
 
     // מיון: הזמנות חדשות קודם (לפי מספר הזמנה יורד)
     const sorted = active.sort((a, b) => {
@@ -125,8 +126,8 @@ export default function ItemsList() {
     const tab = TABS.find(t => t.key === activeTab)!
     return items.filter(i => {
       if (i.item_status === 'cancelled' && activeTab !== 'all') return false
-      if (tab.statuses.length && !tab.statuses.includes(i.item_status)) return false
-      if (activeRoute !== 'all' && resolveItemRoute(i.production_route, i.family) !== activeRoute) return false
+      if (tab.statuses.length && (!i.for_execution || !tab.statuses.includes(i.item_status))) return false
+      if (activeRoute !== 'all' && getItemRoute(i.family) !== activeRoute) return false
       if (search) {
         const q = search.toLowerCase()
         return (
@@ -140,7 +141,12 @@ export default function ItemsList() {
     })
   }, [items, activeTab, activeRoute, search])
 
-  const allSelected = filtered.length > 0 && selected.size === filtered.length
+  const selectable = filtered.filter(i => i.id && i.order_id && i.for_execution && ITEM_STATUS_ORDER.some(s => s === i.item_status))
+  const allSelected = selectable.length > 0 && selectable.every(i => selected.has(i.id))
+  const allowedStatuses = ITEM_STATUS_ORDER.filter(status => selected.size > 0 && Array.from(selected).every(id => {
+    const item = items.find(i => i.id === id)
+    return !!item?.order_id && item.for_execution && canTransitionItemStatus(item.item_status, status)
+  }))
 
   // חלוקת filtered לקבוצות תצוגה לפי groupBy — לא משפיע על בחירה/פעולות, רק על הצגה
   const grouped = useMemo(() => {
@@ -198,17 +204,19 @@ export default function ItemsList() {
   }, [filtered, groupBy])
 
   const toggle = (id: string) => {
+    if (!selectable.some(i => i.id === id)) return
     const next = new Set(selected)
     next.has(id) ? next.delete(id) : next.add(id)
     setSelected(next)
   }
 
   const toggleAll = () => {
-    setSelected(allSelected ? new Set() : new Set(filtered.map(i => i.id)))
+    setSelected(allSelected ? new Set() : new Set(selectable.map(i => i.id)))
   }
 
   // בדוק לכל הזמנה שהושפעה — האם כל הפריטים באותו סטטוס? אם כן, הוסף להצעת סנכרון.
   const checkSyncForOrders = async (affectedOrderIds: string[]) => {
+    for (const orderId of affectedOrderIds) await recalculateOrderStatus(orderId, profile?.id ?? null)
     const queue: typeof syncQueue = []
 
     for (const orderId of affectedOrderIds) {
@@ -242,8 +250,13 @@ export default function ItemsList() {
   }
 
   const applyStatus = async (status: string) => {
+    if (!allowedStatuses.some(s => s === status)) {
+      setErr('ניתן לעדכן רק פריטים לביצוע לשלב הבא במסלול הסטטוסים')
+      return
+    }
     const ids = Array.from(selected)
-    await supabase.from('order_items').update({ item_status: status }).in('id', ids)
+    const { error } = await supabase.from('order_items').update({ item_status: status }).in('id', ids)
+    if (error) { setErr('שגיאה בעדכון הפריטים: ' + error.message); return }
 
     // רישום היסטוריה
     const rows = ids.map(itemId => {
@@ -265,8 +278,12 @@ export default function ItemsList() {
     ))
 
     setSelected(new Set())
-    await load()
-    await checkSyncForOrders(affectedOrderIds)
+    try {
+      await checkSyncForOrders(affectedOrderIds)
+      await load()
+    } catch {
+      setErr('הפריטים עודכנו, אך חישוב סטטוס ההזמנה נכשל. יש לרענן את ההזמנה.')
+    }
   }
 
   // אישור קידום הזמנה מהתור
@@ -321,7 +338,7 @@ export default function ItemsList() {
             <span className="mr-1 text-xs opacity-70">
               ({items.filter(i =>
                 i.item_status !== 'cancelled' &&
-                (!t.statuses.length || t.statuses.includes(i.item_status))
+                (!t.statuses.length || (i.for_execution && t.statuses.includes(i.item_status)))
               ).length})
             </span>
           </button>
@@ -394,6 +411,7 @@ export default function ItemsList() {
                          selected.has(i.id) ? 'bg-brand-light' : ''
                        }`}>
                     <input type="checkbox" checked={selected.has(i.id)}
+                           disabled={!selectable.some(item => item.id === i.id)}
                            onChange={() => toggle(i.id)}
                            className="w-4 h-4 shrink-0" />
 
@@ -414,11 +432,11 @@ export default function ItemsList() {
                       <div className="text-xs text-slate-600 mt-0.5 flex items-center gap-1">
                         <span>{itemTypeLabel(i)} — {i.location}</span>
                         <span className={`px-1.5 py-0.5 rounded text-[10px] ${
-                          resolveItemRoute(i.production_route, i.family) === 'cutter'
+                          getItemRoute(i.family) === 'cutter'
                             ? 'bg-purple-100 text-purple-700'
                             : 'bg-blue-100 text-blue-700'
                         }`}>
-                          {ITEM_ROUTE_LABELS[resolveItemRoute(i.production_route, i.family)]}
+                          {ITEM_ROUTE_LABELS[getItemRoute(i.family)]}
                         </span>
                       </div>
 
@@ -431,19 +449,11 @@ export default function ItemsList() {
                     </div>
 
                     <div className="flex flex-col items-end gap-1 shrink-0">
-                      <span className={`text-xs px-2 py-0.5 rounded-full ${
+                      <span className={`text-xs px-2 py-0.5 rounded-full font-medium ${
                         ITEM_STATUS_COLORS[i.item_status] ?? 'bg-slate-100'
                       }`}>
-                        {ITEM_STATUS_LABELS[i.item_status] ?? i.item_status}
+                        {i.for_execution ? (ITEM_STATUS_LABELS[i.item_status] ?? 'סטטוס מורשת') : 'הצעת מחיר / לא לביצוע'}
                       </span>
-                      {nextItemStatus(resolveItemRoute(i.production_route, i.family), i.item_status) && (
-                        <button
-                          className="text-xs text-brand hover:underline"
-                          onClick={() => setAdvanceItem(i)}
-                        >
-                          ▶ קדם
-                        </button>
-                      )}
                     </div>
                   </div>
                 ))}
@@ -454,6 +464,7 @@ export default function ItemsList() {
       )}
 
       <BulkActionBar
+        allowedStatuses={allowedStatuses}
         count={selected.size}
         onApplyStatus={applyStatus}
         onPrintWork={printSelected}

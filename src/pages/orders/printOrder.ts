@@ -127,6 +127,7 @@ export function buildOrderHtml(form: OrderForm, orderNumber: string | number, sh
     <div class="field"><label>שם לקוח: </label>${form.customer_name}</div>
     <div class="field"><label>טלפון: </label>${form.phone}</div>
     <div class="field" style="grid-column:span 2"><label>כתובת: </label>${form.address}</div>
+    ${form.city ? `<div class="field"><label>עיר: </label>${form.city}</div>` : ''}
   </div>
 
   ${form.curtain_items.length > 0 ? `
@@ -203,6 +204,7 @@ export function buildFormFromOrder(order: {
   customer_name_snapshot: string
   phone_snapshot: string
   address_snapshot: string
+  customers?: { city: string | null } | null
   notes: string | null
   signature_name: string | null
   send_email: string | null
@@ -278,6 +280,7 @@ export function buildFormFromOrder(order: {
     customer_name: order.customer_name_snapshot,
     phone: order.phone_snapshot,
     address: order.address_snapshot ?? '',
+    city: order.customers?.city ?? '',
     agent_name: order.profiles?.full_name ?? '',
     curtain_items,
     shading_items,

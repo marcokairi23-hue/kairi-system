@@ -38,14 +38,15 @@ export function SummaryBox({ label, value, color = 'default' }: SummaryBoxProps)
 }
 
 interface BlockHeaderProps {
+  icon?: ReactNode
   title: string
   color: string
   action?: ReactNode
 }
-export function BlockHeader({ title, color, action }: BlockHeaderProps) {
+export function BlockHeader({ title, color, action, icon }: BlockHeaderProps) {
   return (
     <div className={`${color} text-white px-4 py-3 flex items-center justify-between`}>
-      <span className="font-bold text-sm">{title}</span>
+      <span className={`font-bold text-sm${icon ? ' inline-flex items-center gap-2' : ''}`}>{icon}{title}</span>
       {action}
     </div>
   )

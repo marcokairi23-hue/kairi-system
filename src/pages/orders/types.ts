@@ -3,7 +3,8 @@ import { uid } from '../../lib/uid'
 export type ItemFamily = 'curtain' | 'shading'
 // טקסט חופשי (לא enum) — ניתן לעריכה מעמוד ההגדרות, ראו migration 0011.
 export type ShadingSubtype = string
-export type ItemStatus = 'new' | 'cut' | 'sewing' | 'ready' | 'installed' | 'cancelled'
+export type ActiveItemStatus = 'new' | 'preparation' | 'ready' | 'done'
+export type ItemStatus = ActiveItemStatus | 'cancelled'
 
 export interface CurtainItem {
   id: string
@@ -54,6 +55,7 @@ export interface OrderForm {
   customer_name: string
   phone: string
   address: string
+  city: string
   agent_name: string
   // פריטים
   curtain_items: CurtainItem[]
@@ -79,13 +81,11 @@ export const SHADING_SUBTYPES = ['זברה', 'ונציאני', 'רומי', 'גל
 export const MOUNT_TYPES = ['תקרה', 'רגלי קיר']
 export const MECHANISM_SIDES = ['ימין', 'שמאל', 'שני צדדים']
 export const PAYMENT_METHODS = ['מזומן', 'אשראי', 'העברה בנקאית', 'ביט', "צ'ק"]
-export const ITEM_STATUSES: { value: ItemStatus; label: string }[] = [
+export const ITEM_STATUSES: { value: ActiveItemStatus; label: string }[] = [
   { value: 'new', label: 'חדש' },
-  { value: 'cut', label: 'נגזר' },
-  { value: 'sewing', label: 'במתפרה' },
+  { value: 'preparation', label: 'בהכנה' },
   { value: 'ready', label: 'מוכן' },
-  { value: 'installed', label: 'הותקן' },
-  { value: 'cancelled', label: 'מבוטל' },
+  { value: 'done', label: 'הושלם' },
 ]
 
 export function newCurtainItem(): CurtainItem {
@@ -130,6 +130,7 @@ export function emptyForm(agentName: string): OrderForm {
     customer_name: '',
     phone: '',
     address: '',
+    city: '',
     agent_name: agentName,
     curtain_items: [],
     shading_items: [],

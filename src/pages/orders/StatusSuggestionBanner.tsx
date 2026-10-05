@@ -1,7 +1,7 @@
 import { useState } from 'react'
-import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/auth'
 import { ORDER_STATUS_LABELS } from '../../lib/statusHelpers'
+import { recalculateOrderStatus } from '../../lib/recalculateOrderStatus'
 
 interface StatusSuggestionBannerProps {
   orderId: string
@@ -13,7 +13,6 @@ interface StatusSuggestionBannerProps {
 
 export default function StatusSuggestionBanner({
   orderId,
-  currentStatus,
   suggestedStatus,
   reason,
   onApplied,
@@ -23,34 +22,21 @@ export default function StatusSuggestionBanner({
   const [applying, setApplying] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
-  if (dismissed) return null
+  if (dismissed || suggestedStatus === 'cancelled' || !ORDER_STATUS_LABELS[suggestedStatus]) return null
 
   const suggestedLabel = ORDER_STATUS_LABELS[suggestedStatus] ?? suggestedStatus
 
   const apply = async () => {
     setApplying(true)
     setError(null)
-    const { error: updateError } = await supabase
-      .from('orders')
-      .update({ status: suggestedStatus })
-      .eq('id', orderId)
-
-    if (updateError) {
+    try {
+      const status = await recalculateOrderStatus(orderId, profile?.id ?? null)
+      setApplying(false)
+      onApplied?.(status)
+    } catch {
       setError('שגיאה בעדכון הסטטוס')
       setApplying(false)
-      return
     }
-
-    await supabase.from('order_status_history').insert({
-      order_id: orderId,
-      from_status: currentStatus,
-      to_status: suggestedStatus,
-      changed_by: profile?.id ?? null,
-      note: reason,
-    })
-
-    setApplying(false)
-    onApplied?.(suggestedStatus)
   }
 
   return (

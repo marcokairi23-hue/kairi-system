@@ -1,7 +1,11 @@
 import { ShadingItem, SHADING_SUBTYPES, MOUNT_TYPES, MECHANISM_SIDES, ITEM_STATUSES } from './types'
+import { canTransitionItemStatus } from '../../lib/statusHelpers'
 import { Field } from './FormFields'
+import { useId, useState } from 'react'
 
 interface Props {
+  creationMode?: boolean
+  editMode?: boolean
   item: ShadingItem
   index: number
   onChange: (item: ShadingItem) => void
@@ -9,8 +13,19 @@ interface Props {
   subtypes?: string[]
 }
 
-export default function ShadingCard({ item, index, onChange, onRemove, subtypes = SHADING_SUBTYPES }: Props) {
+export default function ShadingCard({ item, index, onChange, onRemove, creationMode = false, editMode = false, subtypes = SHADING_SUBTYPES }: Props) {
   const set = (k: keyof ShadingItem, v: unknown) => onChange({ ...item, [k]: v })
+  const [widthBlurred, setWidthBlurred] = useState(false)
+  const [heightBlurred, setHeightBlurred] = useState(false)
+  const errorId = useId()
+  const dimensionMode = creationMode || editMode
+  const numericValue = /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)$/
+  const width = item.width_m.trim()
+  const widthInvalid = dimensionMode && widthBlurred && (!numericValue.test(width) || !Number.isFinite(Number(width)) || Number(width) < 0.3 || Number(width) > 10)
+  const heightInvalid = dimensionMode && heightBlurred && item.heights_m.split(',').some(value => {
+    const height = value.trim()
+    return !numericValue.test(height) || !Number.isFinite(Number(height)) || Number(height) <= 0 || Number(height) > 3.5
+  })
 
   return (
     <div className="border border-orange-200 rounded-lg bg-white overflow-hidden mb-3">
@@ -20,11 +35,11 @@ export default function ShadingCard({ item, index, onChange, onRemove, subtypes 
           {item.location && <span className="text-xs text-orange-600">— {item.location}</span>}
         </div>
         <div className="flex items-center gap-3">
-          <label className="flex items-center gap-1 text-xs text-slate-600">
+          {!creationMode && !editMode && <label className="flex items-center gap-1 text-xs text-slate-600">
             <input type="checkbox" checked={item.for_execution}
                    onChange={e => set('for_execution', e.target.checked)} />
             לביצוע
-          </label>
+          </label>}
           <button onClick={onRemove} className="text-red-400 hover:text-red-600 text-lg leading-none">×</button>
         </div>
       </div>
@@ -51,13 +66,21 @@ export default function ShadingCard({ item, index, onChange, onRemove, subtypes 
         </Field>
 
         <Field label="רוחב (מ׳)" required>
-          <input className="input" type="number" min="0" step="0.01" dir="ltr" value={item.width_m}
+          <input className={`input${widthInvalid ? ' border-red-500 ring-1 ring-red-500' : ''}`} type={dimensionMode ? 'text' : 'number'} inputMode={dimensionMode ? 'decimal' : undefined} required={dimensionMode} min={dimensionMode ? "0.30" : "0"} max={dimensionMode ? "10.00" : undefined} step="0.01" dir="ltr" value={item.width_m}
+                 onBlur={() => { if (dimensionMode) setWidthBlurred(true) }}
+                 aria-invalid={widthInvalid || undefined} aria-describedby={widthInvalid ? `${errorId}-width` : undefined}
                  onChange={e => set('width_m', e.target.value)} />
+          {widthInvalid && <p id={`${errorId}-width`} role="alert" className="text-xs text-red-600 mt-1">הרוחב חייב להיות מספר בין 0.30 ל־10.00 מטר</p>}
+          {dimensionMode && <p className="text-xs text-slate-500 mt-1">רוחב בין 0.30 ל-10.00 מטר</p>}
         </Field>
 
         <Field label="גובה (מ׳)" required>
-          <input className="input" dir="ltr" value={item.heights_m}
+          <input className={`input${heightInvalid ? ' border-red-500 ring-1 ring-red-500' : ''}`} required={dimensionMode} dir="ltr" value={item.heights_m}
+                 onBlur={() => { if (dimensionMode) setHeightBlurred(true) }}
+                 aria-invalid={heightInvalid || undefined} aria-describedby={heightInvalid ? `${errorId}-height` : undefined}
                  onChange={e => set('heights_m', e.target.value)} />
+          {heightInvalid && <p id={`${errorId}-height`} role="alert" className="text-xs text-red-600 mt-1">כל גובה חייב להיות מספר גדול מ־0 ועד 3.50 מטר, ללא ערכים ריקים</p>}
+          {dimensionMode && <p className="text-xs text-slate-500 mt-1">כל גובה גדול מ-0 ועד 3.50 מטר</p>}
         </Field>
 
         <Field label="צד מנגנון">
@@ -73,12 +96,12 @@ export default function ShadingCard({ item, index, onChange, onRemove, subtypes 
                  placeholder="לבן, אפור..." />
         </Field>
 
-        <Field label="סטטוס">
+        {!creationMode && item.db_id && item.for_execution && ITEM_STATUSES.some(s => s.value === item.item_status) && <Field label="סטטוס">
           <select className="input" value={item.item_status}
-                  onChange={e => set('item_status', e.target.value as ShadingItem['item_status'])}>
-            {ITEM_STATUSES.map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
+                  onChange={e => { if (canTransitionItemStatus(item.item_status, e.target.value)) set('item_status', e.target.value as ShadingItem['item_status']) }}>
+            {ITEM_STATUSES.filter(s => s.value === item.item_status || canTransitionItemStatus(item.item_status, s.value)).map(s => <option key={s.value} value={s.value}>{s.label}</option>)}
           </select>
-        </Field>
+        </Field>}
 
         <Field label="עלות (₪)" required>
           <input className="input font-bold" type="number" min="0" dir="ltr" value={item.price}

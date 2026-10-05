@@ -1,12 +1,14 @@
 import { useEffect, useMemo, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
+import { ArrowLeft, Check, Printer } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/auth'
 import {
-  ITEM_STATUS_LABELS, ITEM_ROUTE_LABELS, resolveItemRoute, nextItemStatus,
-  dateColumnForTransition, ACTIVE_ORDER_STATUSES, INTERNAL_ITEM_TRACK, EXTERNAL_ITEM_TRACK,
+  ITEM_STATUS_LABELS, ITEM_ROUTE_LABELS, getItemRoute, nextItemStatus,
+  ACTIVE_ORDER_STATUSES, INTERNAL_ITEM_TRACK, EXTERNAL_ITEM_TRACK,
 } from '../../lib/statusHelpers'
 import { printWorkOrder } from './printWork'
+import { recalculateOrderStatus } from '../../lib/recalculateOrderStatus'
 
 interface Item {
   id: string
@@ -44,26 +46,23 @@ interface Worker { id: string; full_name: string }
 const TABS: { key: string; label: string; statuses: string[] }[] = [
   { key: 'all',  label: 'הכל',    statuses: [] },
   { key: 'new',  label: 'חדש',    statuses: ['new'] },
-  { key: 'wip',  label: 'בעבודה', statuses: ['cut', 'sewing', 'ordered_from_supplier', 'arrived'] },
+  { key: 'preparation', label: 'בהכנה', statuses: ['preparation'] },
   { key: 'ready', label: 'מוכן',  statuses: ['ready'] },
+  { key: 'done', label: 'הושלם', statuses: ['done'] },
 ]
 
 // תווית פעולה = שם היעד (כמו ב-V1), לא "▶ קדם" גנרי
 const ADVANCE_LABELS: Record<string, string> = {
-  cut: 'גזור',
-  sewing: 'למתפרה',
-  ready: 'מוכן',
-  ordered_from_supplier: 'הזמן מספק',
-  arrived: 'הגיע',
+  preparation: 'העבר להכנה',
+  ready: 'סמן כמוכן',
+  done: 'סמן כהושלם',
 }
 
 const STAGE_COLOR: Record<string, string> = {
   new: '#94a3b8',
-  cut: '#b45309',
-  ordered_from_supplier: '#b45309',
-  sewing: '#7e22ce',
-  arrived: '#7e22ce',
+  preparation: '#7e22ce',
   ready: '#0f766e',
+  done: '#15803d',
 }
 
 export default function ProductionBoard() {
@@ -78,6 +77,7 @@ export default function ProductionBoard() {
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [assignWorker, setAssignWorker] = useState('')
   const [busy, setBusy] = useState(false)
+  const [activeRoute, setActiveRoute] = useState('all')
 
   const load = async () => {
     setLoading(true)
@@ -92,15 +92,15 @@ export default function ProductionBoard() {
       return
     }
 
-    // V1: אין שלב התקנה בלוח הייצור — הפריט מסיים ב"מוכן". גם כאן, ACTIVE_ORDER_STATUSES
+    // V1: four active item statuses. ACTIVE_ORDER_STATUSES
     // כמו ב-ItemsList (הזמנה שעדיין לא פעילה לא מוצגת).
     const active = ((data ?? []) as Item[]).filter(i =>
-      i.for_execution &&
-      i.item_status !== 'cancelled' &&
-      i.item_status !== 'installed' &&
+      i.id && i.order_id && i.for_execution && ['curtain', 'shading'].includes(i.family) &&
+      INTERNAL_ITEM_TRACK.some(s => s === i.item_status) &&
       ACTIVE_ORDER_STATUSES.includes(i.orders?.status ?? ''))
 
     setItems(active)
+    setSelected(previous => new Set([...previous].filter(id => active.some(i => i.id === id))))
     setErr(null)
     setLoading(false)
   }
@@ -116,6 +116,7 @@ export default function ProductionBoard() {
   const filtered = useMemo(() => {
     const tab = TABS.find(t => t.key === activeTab)!
     return items.filter(i => {
+      if (activeRoute !== 'all' && getItemRoute(i.family) !== activeRoute) return false
       if (tab.statuses.length && !tab.statuses.includes(i.item_status)) return false
       if (search) {
         const q = search.toLowerCase()
@@ -123,12 +124,12 @@ export default function ProductionBoard() {
           i.location?.toLowerCase().includes(q) ||
           i.orders?.customer_name_snapshot?.toLowerCase().includes(q) ||
           String(i.orders?.order_number ?? '').includes(q) ||
-          i.fabric_text?.toLowerCase().includes(q)
+          i.fabric_text?.toLowerCase().includes(q) || i.color_fabric_text?.toLowerCase().includes(q)
         )
       }
       return true
     })
-  }, [items, activeTab, search])
+  }, [items, activeTab, activeRoute, search])
 
   // קיבוץ לפי הזמנה (V1 §2a) — כל קבוצה עם כותרת, סיכום, וקישור לפתיחת ההזמנה
   const groups = useMemo(() => {
@@ -156,12 +157,14 @@ export default function ProductionBoard() {
   const orderCount = groups.length
 
   const toggleItem = (id: string) => {
+    if (busy || !filtered.some(i => i.id === id)) return
     const next = new Set(selected)
     next.has(id) ? next.delete(id) : next.add(id)
     setSelected(next)
   }
 
   const toggleGroup = (groupItems: Item[]) => {
+    if (busy) return
     const allSelected = groupItems.every(i => selected.has(i.id))
     const next = new Set(selected)
     groupItems.forEach(i => allSelected ? next.delete(i.id) : next.add(i.id))
@@ -178,42 +181,50 @@ export default function ProductionBoard() {
     return anyItem ? `הזמנה #${anyItem.orders?.order_number ?? '—'}` : null
   }, [selected, items])
 
-  // קידום כל פריט נבחר לשלב הבא *שלו* (כל פריט יכול להיות בשלב שונה)
+  const selectedItems = items.filter(i => selected.has(i.id))
+  const commonNext = selected.size > 0 && selectedItems.length === selected.size
+    ? nextItemStatus(getItemRoute(selectedItems[0].family), selectedItems[0].item_status) : null
+  const bulkNext = commonNext && selectedItems.every(i =>
+    i.for_execution && nextItemStatus(getItemRoute(i.family), i.item_status) === commonNext) ? commonNext : null
+
+  // Only a common next V1 transition is allowed for the complete selection.
   const advanceSelected = async () => {
+    if (busy || !bulkNext) return
     setBusy(true)
-    const ids = Array.from(selected)
     const affectedOrderIds = new Set<string>()
-
-    for (const id of ids) {
-      const item = items.find(i => i.id === id)
-      if (!item) continue
-      const route = resolveItemRoute(item.production_route, item.family)
-      const next = nextItemStatus(route, item.item_status)
-      if (!next) continue
-
-      const dateColumn = dateColumnForTransition(item.item_status, next)
-      const updates: Record<string, unknown> = { item_status: next }
-      if (dateColumn) updates[dateColumn] = new Date().toISOString()
-
-      await supabase.from('order_items').update(updates).eq('id', id)
-      await supabase.from('order_status_history').insert({
-        order_id: item.order_id,
-        order_item_id: id,
-        from_status: item.item_status,
-        to_status: next,
-        changed_by: profile?.id ?? null,
-        note: 'קידום גורף מלוח הייצור',
-      })
-      affectedOrderIds.add(item.order_id)
+    let failed = false
+    try {
+      for (const item of selectedItems) {
+        const { data, error } = await supabase.from('order_items').update({ item_status: bulkNext })
+          .eq('id', item.id).eq('for_execution', true).eq('item_status', item.item_status).select('id')
+        if (error) throw error
+        if (!data?.length) throw new Error('הפריט השתנה; יש לרענן את הבחירה')
+        affectedOrderIds.add(item.order_id)
+        const { error: historyError } = await supabase.from('order_status_history').insert({
+          order_id: item.order_id, order_item_id: item.id, from_status: item.item_status,
+          to_status: bulkNext, changed_by: profile?.id ?? null, note: 'עדכון גורף מלוח הייצור',
+        })
+        if (historyError) throw historyError
+      }
+      setSelected(new Set())
+    } catch {
+      failed = true
+      setErr('העדכון הקבוצתי לא הושלם. יש לרענן ולבדוק את הפריטים.')
+    } finally {
+      try {
+        for (const orderId of affectedOrderIds) await recalculateOrderStatus(orderId, profile?.id ?? null)
+      } catch {
+        failed = true
+        setErr('חישוב סטטוס ההזמנה נכשל. יש לרענן ולבדוק את ההזמנה.')
+      }
+      setBusy(false)
     }
-
-    setSelected(new Set())
-    await load()
-    setBusy(false)
+    // Reload without clearing an update error.
+    if (!failed) await load()
   }
 
   const assignSelected = async (workerId: string) => {
-    if (!workerId) return
+    if (busy || !workerId || !selected.size || selectedItems.length !== selected.size) return
     setBusy(true)
     const ids = Array.from(selected)
     await supabase.from('order_items').update({ assigned_worker: workerId }).in('id', ids)
@@ -229,27 +240,35 @@ export default function ProductionBoard() {
 
   // קידום פריט בודד בלחיצה על כפתור הפעולה בשורה
   const advanceOne = async (item: Item) => {
-    const route = resolveItemRoute(item.production_route, item.family)
+    if (busy || !item.id || !item.order_id || !item.for_execution) return
+    const route = getItemRoute(item.family)
     const next = nextItemStatus(route, item.item_status)
     if (!next) return
     setBusy(true)
 
-    const dateColumn = dateColumnForTransition(item.item_status, next)
-    const updates: Record<string, unknown> = { item_status: next }
-    if (dateColumn) updates[dateColumn] = new Date().toISOString()
+    try {
+      const updates: Record<string, unknown> = { item_status: next }
 
-    await supabase.from('order_items').update(updates).eq('id', item.id)
-    await supabase.from('order_status_history').insert({
-      order_id: item.order_id,
-      order_item_id: item.id,
-      from_status: item.item_status,
-      to_status: next,
-      changed_by: profile?.id ?? null,
-      note: 'קידום פריט מלוח הייצור',
-    })
+      const { data, error } = await supabase.from('order_items').update(updates)
+        .eq('id', item.id).eq('for_execution', true).eq('item_status', item.item_status).select('id')
+      if (error) throw error
+      if (!data?.length) throw new Error('הפריט השתנה; יש לרענן')
+      await supabase.from('order_status_history').insert({
+        order_id: item.order_id,
+        order_item_id: item.id,
+        from_status: item.item_status,
+        to_status: next,
+        changed_by: profile?.id ?? null,
+        note: 'קידום פריט מלוח הייצור',
+      })
 
-    await load()
-    setBusy(false)
+      await recalculateOrderStatus(item.order_id, profile?.id ?? null)
+      await load()
+    } catch {
+      setErr('עדכון הפריט או חישוב סטטוס ההזמנה נכשל. יש לרענן ולבדוק את ההזמנה.')
+    } finally {
+      setBusy(false)
+    }
   }
 
   return (
@@ -267,6 +286,13 @@ export default function ProductionBoard() {
       </div>
 
       {/* טאבי סינון */}
+      <div className="flex gap-1 mb-3">
+        {(['all', 'cutter', 'office'] as const).map(route => <button key={route} disabled={busy}
+          onClick={() => { setActiveRoute(route); setSelected(new Set()) }}
+          className={`px-3 py-1 rounded-full text-xs font-medium ${activeRoute === route ? 'bg-slate-700 text-white' : 'bg-white border border-slate-200 text-slate-500 hover:bg-slate-50'}`}>
+          {route === 'all' ? 'כל המסלולים' : ITEM_ROUTE_LABELS[route]}
+        </button>)}
+      </div>
       <div className="flex gap-1 mb-4">
         {TABS.map(t => (
           <button key={t.key} onClick={() => { setActiveTab(t.key); setSelected(new Set()) }}
@@ -290,7 +316,7 @@ export default function ProductionBoard() {
       {!loading && groups.length > 0 && (
         <div className="flex flex-col gap-3">
           {groups.map(g => {
-            const readyCount = g.items.filter(i => i.item_status === 'ready').length
+            const readyCount = g.items.filter(i => i.item_status === 'ready' || i.item_status === 'done').length
             const allReady = readyCount === g.items.length
             const noneStarted = g.items.every(i => i.item_status === 'new')
             const groupSelected = g.items.every(i => selected.has(i.id))
@@ -299,7 +325,7 @@ export default function ProductionBoard() {
               <div key={g.orderId} className="card overflow-hidden">
                 {/* כותרת קבוצת הזמנה */}
                 <div className={`flex items-center gap-3 p-3 flex-wrap ${allReady ? 'bg-brand-light' : 'bg-slate-50'}`}>
-                  <input type="checkbox" checked={groupSelected}
+                  <input type="checkbox" checked={groupSelected} disabled={busy}
                          onChange={() => toggleGroup(g.items)}
                          className="w-4 h-4 shrink-0" />
                   <div className="flex items-baseline gap-2 flex-wrap flex-1 min-w-0">
@@ -313,21 +339,21 @@ export default function ProductionBoard() {
                     </span>
                   </div>
                   {allReady && (
-                    <button className="btn-primary text-xs px-3 py-1.5"
+                    <button className="btn-ghost text-xs px-3 py-1.5"
                             onClick={() => navigate(`/orders/${g.orderId}`)}>
-                      סגור הזמנה
+                      פתח הזמנה
                     </button>
                   )}
                   <button className="text-sm font-bold text-brand shrink-0"
                           onClick={() => navigate(`/orders/${g.orderId}`)}>
-                    פתח הזמנה ←
+                    פתח הזמנה <ArrowLeft size={14} className="inline-block" aria-hidden="true" />
                   </button>
                 </div>
 
                 {/* שורות פריטים */}
                 <div className="divide-y">
                   {g.items.map(i => {
-                    const route = resolveItemRoute(i.production_route, i.family)
+                    const route = getItemRoute(i.family)
                     const track = route === 'cutter' ? INTERNAL_ITEM_TRACK : EXTERNAL_ITEM_TRACK
                     const stepIdx = track.indexOf(i.item_status as never)
                     const next = nextItemStatus(route, i.item_status)
@@ -336,7 +362,7 @@ export default function ProductionBoard() {
                     return (
                       <div key={i.id}
                            className={`flex items-center gap-3 p-3 flex-wrap ${selected.has(i.id) ? 'bg-brand-light' : ''}`}>
-                        <input type="checkbox" checked={selected.has(i.id)}
+                        <input type="checkbox" checked={selected.has(i.id)} disabled={busy}
                                onChange={() => toggleItem(i.id)}
                                className="w-4 h-4 shrink-0" />
 
@@ -354,6 +380,9 @@ export default function ProductionBoard() {
                             {itemTypeLabel(i)}
                             {' · '}<span dir="ltr">{i.width_m}×{i.heights_m?.join('/')}</span> מ׳
                             {i.fabric_text && <> · {i.fabric_text}</>}
+                            {i.color_fabric_text && <> · {i.color_fabric_text}</>}
+                            {i.mount_type && <> · {i.mount_type}</>}
+                            {i.mechanism_side && <> · {i.mechanism_side}</>}
                           </div>
                         </div>
 
@@ -365,7 +394,7 @@ export default function ProductionBoard() {
                                     style={{ background: idx <= stepIdx ? STAGE_COLOR[i.item_status] : '#e5e2dc' }} />
                             ))}
                           </div>
-                          <span className="text-xs font-bold" style={{ color: STAGE_COLOR[i.item_status] }}>
+                          <span className="text-xs px-2 py-0.5 rounded-full font-medium bg-slate-100" style={{ color: STAGE_COLOR[i.item_status] }}>
                             {ITEM_STATUS_LABELS[i.item_status]}
                           </span>
                         </div>
@@ -408,12 +437,12 @@ export default function ProductionBoard() {
               <span className="text-xs text-white/70 shrink-0">{selectedOrderLabel}</span>
             )}
             <div className="flex-1" />
-            <button disabled={busy}
-                    className="bg-white text-brand-dark rounded-md px-4 py-2 text-sm font-bold"
-                    onClick={advanceSelected}>
-              קדם לשלב הבא
+            <button className="border border-white/40 rounded-md px-3 py-2 text-sm font-medium"
+              disabled={busy || !bulkNext} onClick={advanceSelected}>
+              <Check size={16} className="inline-block me-1" aria-hidden="true" /> {bulkNext ? ADVANCE_LABELS[bulkNext] : 'אין מעבר משותף לבחירה'}
             </button>
             <select className="rounded-md px-3 py-2 text-sm bg-transparent border border-white/40 text-white"
+                    disabled={busy}
                     value={assignWorker}
                     onChange={e => { setAssignWorker(e.target.value); assignSelected(e.target.value) }}>
               <option value="" className="text-slate-700">שייך עובד</option>
@@ -421,9 +450,9 @@ export default function ProductionBoard() {
             </select>
             <button className="border border-white/40 rounded-md px-3 py-2 text-sm font-medium"
                     onClick={printSelected}>
-              הדפס הוראות
+              <Printer size={16} className="inline-block me-1" aria-hidden="true" /> הדפס הוראות
             </button>
-            <button className="text-sm text-white/75" onClick={() => setSelected(new Set())}>
+            <button className="text-sm text-white/75" disabled={busy} onClick={() => setSelected(new Set())}>
               נקה
             </button>
           </div>

@@ -17,6 +17,7 @@ import ActivityLog from './pages/activity/ActivityLog'
 import UsersList from './pages/users/UsersList'
 import SettingsPage from './pages/settings/SettingsPage'
 import ScreenManager from './pages/admin/ScreenManager'
+import Collections from './pages/collections/Collections'
 
 // שומר route: מרנדר את children רק אם useFeature(featureKey) === true,
 // אחרת מפנה ל-"/". "/" (dashboard) עצמו לא עטוף בשומר הזה כדי לא ליצור
@@ -51,6 +52,7 @@ export default function App() {
         <Route path="/orders/:id" element={<FeatureRoute featureKey="orderDetail"><OrderDetail /></FeatureRoute>} />
         <Route path="/orders/:id/edit" element={<FeatureRoute featureKey="orderDetail"><EditOrder /></FeatureRoute>} />
         <Route path="/items" element={<FeatureRoute featureKey="items"><ItemsList /></FeatureRoute>} />
+        <Route path="/collections" element={<Collections />} />
         <Route path="/production" element={<FeatureRoute featureKey="production"><ProductionBoard /></FeatureRoute>} />
         <Route path="/activity" element={<FeatureRoute featureKey="activityLog"><ActivityLog /></FeatureRoute>} />
         <Route path="/users" element={<FeatureRoute featureKey="users"><UsersList /></FeatureRoute>} />
