@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { UserRound, PanelsTopLeft, Blinds, Package, CreditCard, PenLine, Send } from 'lucide-react'
+import { UserRound, PanelsTopLeft, Blinds, Package, CreditCard, PenLine, Send, ListChecks, TriangleAlert } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../lib/auth'
 import { supabase } from '../../lib/supabase'
@@ -28,9 +28,10 @@ export default function NewOrder() {
   const [form, setForm] = useState<OrderForm>(emptyForm(profile?.full_name ?? ''))
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [showDialog, setShowDialog] = useState(false)
   const [itemSelectionOpen, setItemSelectionOpen] = useState(false)
-  const [itemSelectionPurpose, setItemSelectionPurpose] = useState<'fill' | 'submit'>('fill')
+  const [selectionReviewed, setSelectionReviewed] = useState(false)
+  const [manualFinalTotal, setManualFinalTotal] = useState(false)
+  const [selectionTotalWarning, setSelectionTotalWarning] = useState(false)
   const [depositRequested, setDepositRequested] = useState('')
   const [receipt, setReceipt] = useState<{ orderId: string; paymentId: string; route: 'cash' | 'check'; amount: number; by: string; at: string } | null>(null)
   const savingReceipt = useRef(false)
@@ -45,25 +46,34 @@ export default function NewOrder() {
     { value: 'check', label: 'צ׳ק' },
     { value: 'credit_card', label: 'אשראי' },
     { value: 'bank_transfer', label: 'העברה בנקאית' },
-    { value: 'quote', label: 'הצעת מחיר' },
   ]
   const shadingSubtypes = useSettingsList('shading_subtypes', SHADING_SUBTYPES)
 
   const setF = (k: keyof OrderForm, v: unknown) => setForm(f => ({ ...f, [k]: v }))
 
   // --- פריטי וילונות ---
-  const addCurtain = () => setF('curtain_items', [...form.curtain_items, newCurtainItem()])
+  const addCurtain = () => {
+    setSelectionReviewed(false)
+    setF('curtain_items', [...form.curtain_items, newCurtainItem()])
+  }
   const updateCurtain = (i: number, item: typeof form.curtain_items[0]) =>
     setF('curtain_items', form.curtain_items.map((c, idx) => idx === i ? item : c))
-  const removeCurtain = (i: number) =>
+  const removeCurtain = (i: number) => {
+    setSelectionReviewed(false)
     setF('curtain_items', form.curtain_items.filter((_, idx) => idx !== i))
+  }
 
   // --- פריטי הצללה ---
-  const addShading = () => setF('shading_items', [...form.shading_items, newShadingItem()])
+  const addShading = () => {
+    setSelectionReviewed(false)
+    setF('shading_items', [...form.shading_items, newShadingItem()])
+  }
   const updateShading = (i: number, item: typeof form.shading_items[0]) =>
     setF('shading_items', form.shading_items.map((s, idx) => idx === i ? item : s))
-  const removeShading = (i: number) =>
+  const removeShading = (i: number) => {
+    setSelectionReviewed(false)
     setF('shading_items', form.shading_items.filter((_, idx) => idx !== i))
+  }
 
   // --- אביזרים ---
   const addAccessory = () => setF('accessories', [
@@ -81,6 +91,8 @@ export default function NewOrder() {
   const autoTotal = calcAutoTotal(form)
   const remaining = calcRemaining(form)
   const hasExecutionItems = [...form.curtain_items, ...form.shading_items].some(i => i.for_execution)
+  const allItems = [...form.curtain_items, ...form.shading_items]
+  const executionCount = allItems.filter(i => i.for_execution).length
   const paymentRoute = hasExecutionItems ? form.payment_method : 'quote'
 
   const validatePayment = (f: OrderForm, route: string): string | null => {
@@ -139,21 +151,14 @@ export default function NewOrder() {
     }
   }
 
-  const fillAll = () => {
-    const updated: OrderForm = {
-      ...form,
-      curtain_items: form.curtain_items.map(i => ({ ...i, for_execution: true })),
-      shading_items: form.shading_items.map(i => ({ ...i, for_execution: true })),
-    }
-    setForm({ ...updated, final_total: String(calcAutoTotal(updated)) })
-  }
-
-  const fillPartial = () => {
-    setItemSelectionPurpose('fill')
-    setItemSelectionOpen(true)
+  const updateCalculatedTotal = () => {
+    setF('final_total', String(autoTotal))
+    setManualFinalTotal(false)
+    setSelectionTotalWarning(false)
   }
 
   const confirmItemSelection = (selectedIds: Set<string>) => {
+    const changed = allItems.some(i => i.for_execution !== selectedIds.has(i.id))
     const updated: OrderForm = {
       ...form,
       curtain_items: form.curtain_items.map(i => ({ ...i, for_execution: selectedIds.has(i.id) })),
@@ -162,11 +167,10 @@ export default function NewOrder() {
     if (!updated.curtain_items.some(i => i.for_execution) && !updated.shading_items.some(i => i.for_execution)) {
       updated.paid_on_account = ''
     }
-    setForm(itemSelectionPurpose === 'fill'
-      ? { ...updated, final_total: String(calcAutoTotal(updated)) }
-      : updated)
+    if (manualFinalTotal && changed) setSelectionTotalWarning(true)
+    setForm(manualFinalTotal ? updated : { ...updated, final_total: String(calcAutoTotal(updated)) })
+    setSelectionReviewed(true)
     setItemSelectionOpen(false)
-    if (itemSelectionPurpose === 'submit') setShowDialog(true)
   }
 
   const validateForm = (f: OrderForm): string | null => {
@@ -191,20 +195,27 @@ export default function NewOrder() {
   }
 
   const submitOrder = () => {
+    if (!selectionReviewed) {
+      setError('יש לבחור אילו פריטים נכנסים לביצוע לפני שליחת ההזמנה.')
+      return
+    }
     const validationError = validateForm(form)
     setError(validationError)
     if (validationError) return
-    setItemSelectionPurpose('submit')
-    setItemSelectionOpen(true)
+    void save()
   }
 
   // --- שמירה ---
-  const save = async (isQuote: boolean, formOverride?: OrderForm) => {
+  const save = async () => {
     if (createdOrderId || creatingOrder.current) return
-    const currentForm = formOverride ?? form
+    if (!selectionReviewed) {
+      setError('יש לבחור אילו פריטים נכנסים לביצוע לפני שליחת ההזמנה.')
+      return
+    }
+    const currentForm = form
     const hasExecution = [...currentForm.curtain_items, ...currentForm.shading_items].some(i => i.for_execution)
-    const route = isQuote || !hasExecution ? 'quote' : currentForm.payment_method
-    isQuote = route === 'quote'
+    const route = !hasExecution ? 'quote' : currentForm.payment_method
+    const isQuote = !hasExecution
     const f = { ...currentForm, paid_on_account: '' }
     const validationError = validateForm(f)
     if (validationError) {
@@ -493,12 +504,22 @@ export default function NewOrder() {
         </button>
       )}
 
+      <div className="card p-4 mb-4">
+        <button type="button" className="btn-ghost w-full" onClick={() => setItemSelectionOpen(true)}>
+          <ListChecks size={18} className="inline-block me-1" aria-hidden="true" /> בחירת פריטים לביצוע
+        </button>
+        <p className="text-sm text-slate-600 mt-2">
+          {selectionReviewed ? 'בחירת הפריטים אושרה.' : 'יש לאשר את בחירת הפריטים לפני שליחת ההזמנה.'}
+        </p>
+      </div>
+
       {/* בלוק 4 — תשלום */}
       <div className="card mb-4 overflow-hidden">
         <BlockHeader title="תשלום וסיכום" icon={<CreditCard size={18} aria-hidden="true" />} color="bg-[#1E9E4C]" />
         <div className="p-4 space-y-4">
 
           {/* סיכומי ביניים */}
+          <p className="text-sm font-medium">פריטים לביצוע: {executionCount} מתוך {allItems.length}</p>
           <div className="grid grid-cols-2 sm:grid-cols-4 gap-2">
             <SummaryBox label="סה״כ פריטים לביצוע"
                         value={`₪${itemsTotal.toLocaleString()}`} color="purple" />
@@ -523,17 +544,13 @@ export default function NewOrder() {
                      onChange={e => setF('discount', e.target.value)} />
             </Field>
             <Field label="סה״כ לתשלום (₪)" required>
-              <div className="flex gap-2">
+              <div className="flex flex-col gap-2">
                 <input className="input font-bold" type="number" min="0" dir="ltr"
                        value={form.final_total}
-                       onChange={e => setF('final_total', e.target.value)} />
-                <button type="button" onClick={fillAll}
+                       onChange={e => { setManualFinalTotal(true); setF('final_total', e.target.value) }} />
+                <button type="button" onClick={updateCalculatedTotal}
                         className="shrink-0 px-3 py-2 bg-green-100 hover:bg-green-200 text-green-800 text-xs rounded-lg font-medium">
-                  מלא הכל
-                </button>
-                <button type="button" onClick={fillPartial}
-                        className="shrink-0 px-3 py-2 bg-green-100 hover:bg-green-200 text-green-800 text-xs rounded-lg font-medium">
-                  מלא חלקי
+                  עדכן לסכום המחושב
                 </button>
               </div>
             </Field>
@@ -546,6 +563,7 @@ export default function NewOrder() {
               <select className="input" value={paymentRoute} disabled={!hasExecutionItems}
                       onChange={e => { setForm(f => ({ ...f, payment_method: e.target.value, paid_on_account: '' })) }}>
                 <option value="">בחר...</option>
+                {!hasExecutionItems && <option value="quote">הצעת מחיר</option>}
                 {paymentMethods.map(m => <option key={m.value} value={m.value}>{m.label}</option>)}
               </select>
               {(paymentRoute === 'credit_card' || paymentRoute === 'bank_transfer') && <p className="text-sm text-amber-700 mt-2">ממתין לאישור המשרד — המקדמה טרם התקבלה.</p>}
@@ -556,6 +574,13 @@ export default function NewOrder() {
                      onChange={e => setF('send_email', e.target.value)} />
             </Field>
           </div>
+
+          {selectionTotalWarning && (
+            <p role="alert" className="text-sm text-amber-800 bg-amber-50 rounded-lg p-3">
+              <TriangleAlert size={16} className="inline-block me-1" aria-hidden="true" />
+              בחירת הפריטים השתנתה. החישוב החדש הוא ₪{autoTotal.toLocaleString()}. יש לבדוק את הסכום הסופי לפני שליחת ההזמנה.
+            </p>
+          )}
 
           <Field label="הערות">
             <textarea className="input min-h-[70px] resize-y" value={form.notes}
@@ -650,32 +675,6 @@ export default function NewOrder() {
           </div>
         </div>
       )}
-      {showDialog && (
-        <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-4">
-          <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-xl">
-            <h3 className="font-bold text-lg mb-4 text-center">בחר סוג הזמנה</h3>
-            <div className="space-y-3">
-              <button
-                className="w-full text-right p-4 rounded-xl border-2 border-amber-300 bg-amber-50 hover:bg-amber-100"
-                onClick={() => { setShowDialog(false); save(false) }}>
-                <div className="font-bold text-amber-800">בקשה לגבייה + העברה לביצוע</div>
-                <div className="text-xs text-amber-600">הסטטוס ייקבע לפי פריטי הביצוע ואישור התשלום</div>
-              </button>
-              <button
-                className="w-full text-right p-4 rounded-xl border-2 border-slate-200 bg-white hover:bg-slate-50"
-                onClick={() => { setShowDialog(false); save(true) }}>
-                <div className="font-bold text-slate-700">הצעת מחיר (לא לביצוע)</div>
-                <div className="text-xs text-slate-500">תישמר כהצעת מחיר בלבד</div>
-              </button>
-              <button className="w-full p-3 text-slate-500 hover:text-slate-700 text-sm"
-                      onClick={() => setShowDialog(false)}>
-                ביטול
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-
       <ItemSelectionDialog
         open={itemSelectionOpen}
         items={[
