@@ -8,18 +8,21 @@ import OrderActivityTab from './OrderActivityTab'
 import ItemSelectionDialog from './ItemSelectionDialog'
 import StatusSuggestionBanner from './StatusSuggestionBanner'
 import PaymentModal from './PaymentModal'
+import ItemIssueControl from './ItemIssueControl'
 import { getSignatureUrl, uploadSignature } from '../../lib/uploadSignature'
 import SignatureModal from '../../components/SignatureModal'
 import {
   ORDER_STATUS_LABELS, ORDER_STATUS_COLORS, ORDER_STATUS_NEXT,
   ITEM_STATUS_LABELS, ITEM_STATUS_COLORS, SHADING_LABELS, calcProgress,
   getItemRoute, ITEM_ROUTE_LABELS,
-  deriveV1OrderStatus,
+  deriveV1OrderStatus, displayedOrderStatus,
 } from '../../lib/statusHelpers'
 import { recalculateOrderStatus } from '../../lib/recalculateOrderStatus'
 import { refreshOrderPdf, generateCurrentOrderPdf, getUpdatedOrderPdfDisplayUrl, CUSTOMER_PDF_UPDATE_WARNING } from '../../lib/uploadOrderPdf'
 
 interface OrderItem {
+  issue_kind?: string | null
+  issue_note?: string | null
   id: string
   family: 'curtain' | 'shading'
   subtype?: string
@@ -41,6 +44,7 @@ interface OrderItem {
 }
 
 interface Payment {
+  provider?: string | null
   id: string
   amount: number
   method: string
@@ -124,7 +128,7 @@ export default function OrderDetail() {
       .select('*, profiles!orders_agent_id_fkey(full_name), customers(city), order_items(*), payments(*)')
       .eq('id', id)
       .single()
-    setOrder(data ? { ...data, status: deriveV1OrderStatus(data) } as Order : null)
+    setOrder(data ? { ...data, status: displayedOrderStatus(data) } as Order : null)
     if (data) setPdfDisplayVersion(Date.now())
     setLoading(false)
     setApproverName(null)
@@ -168,6 +172,8 @@ export default function OrderDetail() {
 
   const paid = (order.payments ?? []).reduce((s, p) => s + p.amount, 0)
   const remaining = order.final_total - paid
+  const hasIcreditReceipt = order.payments?.some(payment => payment.provider === 'icredit') ?? false
+  const suggestedFinancialStatus = deriveV1OrderStatus(order)
   const curtains = (order.order_items ?? []).filter(i => i.family === 'curtain')
   const shadings = (order.order_items ?? []).filter(i => i.family === 'shading')
 
@@ -458,6 +464,18 @@ export default function OrderDetail() {
       )}
 
       {selectionError && <p role="alert" className="text-red-600 text-sm mb-3">{selectionError}</p>}
+      {hasIcreditReceipt && <div className="card p-3 mb-3 text-sm text-blue-900">
+        תקבול iCredit אומת ונכלל ביתרה. שינוי סטטוס ההזמנה דורש החלטת עובד; אישור משרד לביצוע נשאר נפרד.
+      </div>}
+      {hasIcreditReceipt && suggestedFinancialStatus !== order.status &&
+        !['draft', 'quote', 'cancelled'].includes(suggestedFinancialStatus) && <div className="mb-3">
+          <StatusSuggestionBanner
+            key={`${order.id}-${order.status}-${suggestedFinancialStatus}`}
+            orderId={order.id} currentStatus={order.status} suggestedStatus={suggestedFinancialStatus}
+            reason="התקבולים, הפריטים ואישור המשרד מאפשרים סטטוס חדש — ניתן לאשר את ההצעה או להשאיר את המצב הנוכחי."
+            onApplied={() => { void load() }}
+          />
+        </div>}
       {legacyUi && <>
       {showProductionSuggestion && order.status === 'pending_payment' && (
         <div className="mb-3">
@@ -699,6 +717,7 @@ export default function OrderDetail() {
                   {item.fabric_text && <span>בד: {item.fabric_text}</span>}
                 </div>
                 {item.notes && <div className="text-slate-400 text-xs mt-1">{item.notes}</div>}
+                {item.for_execution && <ItemIssueControl item={item} orderId={order.id} onSaved={load} />}
               </div>
             ))}
           </div>
@@ -735,6 +754,7 @@ export default function OrderDetail() {
                   {item.color_fabric_text && <span>צבע: {item.color_fabric_text}</span>}
                 </div>
                 {item.notes && <div className="text-slate-400 text-xs mt-1">{item.notes}</div>}
+                {item.for_execution && <ItemIssueControl item={item} orderId={order.id} onSaved={load} />}
               </div>
             ))}
           </div>

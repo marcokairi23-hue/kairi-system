@@ -39,7 +39,13 @@ export interface OrderStatusInput {
   payment_approved?: boolean | null
   final_total: number
   order_items?: ItemLike[]
-  payments?: { amount: number }[]
+  payments?: { amount: number; provider?: string | null }[]
+}
+
+// iCredit changes financial facts. An employee accepts the resulting status proposal.
+export function displayedOrderStatus(order: OrderStatusInput): string {
+  if (order.status && order.payments?.some(p => p.provider === 'icredit')) return order.status
+  return deriveV1OrderStatus(order)
 }
 
 export function deriveV1OrderStatus(order: OrderStatusInput, submitted = true): V1OrderStatus | 'cancelled' {
@@ -48,6 +54,7 @@ export function deriveV1OrderStatus(order: OrderStatusInput, submitted = true): 
   const execution = (order.order_items ?? []).filter(i => i.for_execution && i.item_status !== 'cancelled')
   if (execution.length === 0) return 'quote'
   if (order.payment_approved !== true) return 'waiting_payment'
+  if (execution.some(i => i.issue_kind)) return 'in_execution'
   if (execution.every(i => i.item_status === 'new')) return 'new_execution'
   if (execution.every(i => i.item_status === 'ready')) return 'ready'
   const paid = (order.payments ?? []).reduce((sum, p) => sum + Number(p.amount), 0)
@@ -141,6 +148,7 @@ export function resolveItemRoute(
 // ============================================================
 
 export interface ItemLike {
+  issue_kind?: string | null
   item_status: string
   for_execution: boolean
 }
@@ -158,7 +166,7 @@ export function calcProgress(items: ItemLike[] = []): ItemProgress {
   const relevant = items.filter(i => i.for_execution && i.item_status !== 'cancelled')
   const total = relevant.length
   const done = relevant.filter(
-    i => i.item_status === 'ready' || i.item_status === 'done'
+    i => !i.issue_kind && (i.item_status === 'ready' || i.item_status === 'done')
   ).length
 
   return {

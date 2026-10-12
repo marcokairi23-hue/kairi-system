@@ -3,7 +3,7 @@ import { Link } from 'react-router-dom'
 import { supabase } from '../lib/supabase'
 import { useAuth } from '../lib/auth'
 import { ActivityRow, ActivityRowLine, fetchActivity } from './activity/ActivityLog'
-import { ORDER_STATUS_LABELS, ORDER_STATUS_COLORS, calcProgress, fmt, deriveV1OrderStatus } from '../lib/statusHelpers'
+import { ORDER_STATUS_LABELS, ORDER_STATUS_COLORS, calcProgress, fmt, displayedOrderStatus } from '../lib/statusHelpers'
 import { useFeature } from '../lib/featureFlags'
 
 const STATUS_CARDS: { tab: string; status: string }[] = [
@@ -26,7 +26,7 @@ interface DashOrder {
   final_total: number
   created_at: string
   order_items?: Array<{ item_status: string; for_execution: boolean }>
-  payments?: Array<{ amount: number }>
+  payments?: Array<{ amount: number; provider?: string | null }>
 }
 
 export default function Dashboard() {
@@ -55,7 +55,7 @@ export default function Dashboard() {
     const load = async () => {
       try {
         const [ordersRes, historyRes, settingsRes, activityRows] = await Promise.all([
-          supabase.from('orders').select('id, order_number, status, payment_approved, customer_name_snapshot, final_total, created_at, order_items(item_status, for_execution), payments(amount)'),
+          supabase.from('orders').select('id, order_number, status, payment_approved, customer_name_snapshot, final_total, created_at, order_items(item_status, for_execution, issue_kind), payments(amount, provider)'),
           supabase.from('order_status_history').select('order_id, changed_at').order('changed_at', { ascending: false }),
           supabase.from('settings').select('value').eq('key', 'stuck_order_days').maybeSingle(),
           fetchActivity({ perSourceLimit: 10, throwOnError: true }).catch(() => {
@@ -64,7 +64,7 @@ export default function Dashboard() {
           }),
         ])
 
-        setOrders(((ordersRes.data ?? []) as DashOrder[]).map(order => ({ ...order, status: deriveV1OrderStatus(order) })))
+        setOrders(((ordersRes.data ?? []) as DashOrder[]).map(order => ({ ...order, status: displayedOrderStatus(order) })))
 
         const map = new Map<string, string>()
         for (const h of historyRes.data ?? []) {

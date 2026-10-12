@@ -11,7 +11,7 @@ import SyncItemsDialog from './SyncItemsDialog'
 import SyncOrderDialog from './SyncOrderDialog'
 import { ActionOrder } from './OrderActions'
 import {
-  ORDER_STATUS_NEXT, ORDER_TO_ITEM_STATUS, suggestOrderStatus, fmt, deriveV1OrderStatus,
+  ORDER_STATUS_NEXT, ORDER_TO_ITEM_STATUS, suggestOrderStatus, fmt, displayedOrderStatus,
 } from '../../lib/statusHelpers'
 import { recalculateOrderStatus } from '../../lib/recalculateOrderStatus'
 
@@ -105,7 +105,7 @@ export default function OrdersList() {
       .select('*, profiles!orders_agent_id_fkey(full_name), order_items(*), payments(*)')
       .order('created_at', { ascending: false })
     if (error) console.error('שגיאה בטעינת הזמנות:', error)
-    setOrders(((data ?? []) as Order[]).map(order => ({ ...order, status: deriveV1OrderStatus(order) })))
+    setOrders(((data ?? []) as Order[]).map(order => ({ ...order, status: displayedOrderStatus(order) })))
     setLoading(false)
   }
 

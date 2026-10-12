@@ -1,4 +1,5 @@
 import EditableList from './EditableList'
+import PaymentAutomation from './PaymentAutomation'
 
 export default function SettingsPage() {
   return (
@@ -6,6 +7,7 @@ export default function SettingsPage() {
       <h1 className="text-2xl font-bold mb-4">הגדרות</h1>
 
       <div className="space-y-4">
+        <PaymentAutomation />
         <EditableList
           title="רשימת מתקינים"
           description='משמשת בשיוך מתקין להזמנה (במעבר "מוכנה" → "נאסף ע"י מתקין").'

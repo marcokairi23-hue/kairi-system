@@ -30,7 +30,7 @@ export default function StatusSuggestionBanner({
     setApplying(true)
     setError(null)
     try {
-      const status = await recalculateOrderStatus(orderId, profile?.id ?? null)
+      const status = await recalculateOrderStatus(orderId, profile?.id ?? null, { confirmSuggestion: true })
       setApplying(false)
       onApplied?.(status)
     } catch {

@@ -1,5 +1,5 @@
 import { useRef, useState } from 'react'
-import { UserRound, PanelsTopLeft, Blinds, Package, CreditCard, PenLine, Send, ListChecks, TriangleAlert } from 'lucide-react'
+import { UserRound, PanelsTopLeft, Blinds, Package, CreditCard, PenLine, Send, ListChecks, TriangleAlert, CircleCheck } from 'lucide-react'
 import { useNavigate } from 'react-router-dom'
 import { useAuth } from '../../lib/auth'
 import { supabase } from '../../lib/supabase'
@@ -203,6 +203,7 @@ export default function NewOrder() {
   const submitOrder = () => {
     if (!selectionReviewed) {
       setError('יש לבחור אילו פריטים נכנסים לביצוע לפני שליחת ההזמנה.')
+      setItemSelectionOpen(true)
       return
     }
     const validationError = validateForm(form)
@@ -398,6 +399,41 @@ export default function NewOrder() {
         <button onClick={() => navigate('/orders')} className="btn-ghost text-sm">← חזרה</button>
       </div>
 
+      <section
+        aria-label="בחירת פריטים לביצוע — שלב חובה"
+        className={`sticky top-16 z-10 mb-4 rounded-xl border-2 p-3 sm:p-4 shadow-lg ${selectionReviewed ? 'border-green-300 bg-green-50' : 'border-brand bg-indigo-50'}`}
+      >
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+          <div className="min-w-0">
+            <div className="flex items-center gap-2 mb-1">
+              {selectionReviewed
+                ? <CircleCheck size={20} className="shrink-0 text-green-700" aria-hidden="true" />
+                : <ListChecks size={20} className="shrink-0 text-brand" aria-hidden="true" />}
+              <h2 className="font-bold text-base">בחירת פריטים לביצוע</h2>
+              <span className={`shrink-0 rounded-full px-2 py-0.5 text-xs font-bold ${selectionReviewed ? 'bg-green-100 text-green-800' : 'bg-brand text-white'}`}>
+                {selectionReviewed ? 'אושר' : 'שלב חובה'}
+              </span>
+            </div>
+            <p id="item-selection-status" aria-live="polite" className="text-sm text-slate-700">
+              {selectionReviewed
+                ? `הבחירה אושרה · ${executionCount} מתוך ${allItems.length} פריטים לביצוע`
+                : 'לאחר הוספת הפריטים, חובה לבחור ולאשר אילו מהם ייכנסו לביצוע לפני שליחת ההזמנה.'}
+            </p>
+          </div>
+          <button
+            type="button"
+            className="btn-primary w-full sm:w-auto shrink-0 min-h-[48px] text-base shadow-sm focus-visible:outline focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-brand"
+            disabled={busy || !!createdOrderId}
+            aria-describedby="item-selection-status"
+            aria-haspopup="dialog"
+            onClick={() => setItemSelectionOpen(true)}
+          >
+            <ListChecks size={22} aria-hidden="true" />
+            {selectionReviewed ? 'עדכון בחירת הפריטים' : 'בחירת פריטים ואישור'}
+          </button>
+        </div>
+      </section>
+
       {/* בלוק 1 — פרטי לקוח */}
       <div className="card mb-4 overflow-hidden">
         <BlockHeader title="פרטי לקוח" icon={<UserRound size={18} aria-hidden="true" />} color="bg-[#2743C7]" />
@@ -509,15 +545,6 @@ export default function NewOrder() {
           + הוסף אביזר (חובק, מקל פתיחה...)
         </button>
       )}
-
-      <div className="card p-4 mb-4">
-        <button type="button" className="btn-ghost w-full" onClick={() => setItemSelectionOpen(true)}>
-          <ListChecks size={18} className="inline-block me-1" aria-hidden="true" /> בחירת פריטים לביצוע
-        </button>
-        <p className="text-sm text-slate-600 mt-2">
-          {selectionReviewed ? 'בחירת הפריטים אושרה.' : 'יש לאשר את בחירת הפריטים לפני שליחת ההזמנה.'}
-        </p>
-      </div>
 
       {/* בלוק 4 — תשלום */}
       <div className="card mb-4 overflow-hidden">

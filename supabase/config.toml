@@ -1,0 +1,2 @@
+[functions.icredit-webhook]
+verify_jwt = false

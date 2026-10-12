@@ -41,9 +41,10 @@ export interface ActionOrder {
     price: number
     for_execution: boolean
     item_status: string
+    issue_kind?: string | null
     notes?: string
   }>
-  payments?: Array<{ amount: number; method: string }>
+  payments?: Array<{ amount: number; method: string; provider?: string | null }>
 }
 
 interface Props {

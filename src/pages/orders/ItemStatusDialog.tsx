@@ -17,6 +17,7 @@ export interface DialogItem {
   heights_m: number[]
   item_status: string
   for_execution: boolean
+  issue_kind?: string | null
   // שדות נוספים — נדרשים רק לשם הדפסת דוח עבודה (printWorkOrder), לא לתצוגת הדיאלוג עצמה
   sewing_type?: string | null
   hem_cm?: number | null
@@ -50,7 +51,7 @@ export default function ItemStatusDialog({
   const active = items.filter(i => orderId && i.id && i.for_execution && ITEM_STATUS_ORDER.some(s => s === i.item_status))
   const allowedStatuses = ITEM_STATUS_ORDER.filter(status => selected.size > 0 && Array.from(selected).every(id => {
     const item = active.find(i => i.id === id)
-    return !!item && canTransitionItemStatus(item.item_status, status)
+    return !!item && !(status === 'done' && item.issue_kind) && canTransitionItemStatus(item.item_status, status)
   }))
   const allSelected = active.length > 0 && selected.size === active.length
 

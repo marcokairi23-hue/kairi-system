@@ -34,6 +34,7 @@ interface Item {
   price: number
   for_execution: boolean
   item_status: string
+  issue_kind?: string | null
   notes: string | null
   sort_order?: number
   orders?: {
@@ -145,7 +146,7 @@ export default function ItemsList() {
   const allSelected = selectable.length > 0 && selectable.every(i => selected.has(i.id))
   const allowedStatuses = ITEM_STATUS_ORDER.filter(status => selected.size > 0 && Array.from(selected).every(id => {
     const item = items.find(i => i.id === id)
-    return !!item?.order_id && item.for_execution && canTransitionItemStatus(item.item_status, status)
+    return !!item?.order_id && item.for_execution && !(status === 'done' && item.issue_kind) && canTransitionItemStatus(item.item_status, status)
   }))
 
   // חלוקת filtered לקבוצות תצוגה לפי groupBy — לא משפיע על בחירה/פעולות, רק על הצגה
@@ -454,6 +455,7 @@ export default function ItemsList() {
                       }`}>
                         {i.for_execution ? (ITEM_STATUS_LABELS[i.item_status] ?? 'סטטוס מורשת') : 'הצעת מחיר / לא לביצוע'}
                       </span>
+                      {i.issue_kind && <span className="text-xs font-semibold text-amber-700">דורש טיפול</span>}
                     </div>
                   </div>
                 ))}
