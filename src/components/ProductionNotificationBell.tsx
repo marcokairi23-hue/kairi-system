@@ -6,7 +6,7 @@ import { useFeature } from '../lib/featureFlags'
 import { useAuth } from '../lib/auth'
 import { useDialogFocus } from '../lib/useDialogFocus'
 import { useProductionNotifications } from '../lib/useProductionNotifications'
-import { ProductionTask, productionTaskLabel, TASK_CLOSE_REASONS } from '../lib/productionNotifications'
+import { ProductionTask, productionTaskLabel, productionTaskPath, TASK_CLOSE_REASONS } from '../lib/productionNotifications'
 import { ITEM_ROUTE_LABELS, getItemRoute, SHADING_LABELS } from '../lib/statusHelpers'
 
 const time = (value: string) => new Date(value).toLocaleString('he-IL',{ timeZone:'Asia/Jerusalem',dateStyle:'short',timeStyle:'short' })
@@ -18,7 +18,7 @@ function NotificationPanel({ notifications,state,onState,onMore,onClose,onOpen,c
   onMore:() => void
   onClose:() => void
   onOpen:(task:ProductionTask) => Promise<void>
-  canOpen:boolean
+  canOpen:(task:ProductionTask) => boolean
 }) {
   const dialog=useRef<HTMLDivElement>(null)
   useDialogFocus(dialog,onClose)
@@ -58,10 +58,10 @@ function NotificationPanel({ notifications,state,onState,onMore,onClose,onOpen,c
             {' · '}{task.closed_by_name ?? 'מערכת'}{task.closed_at && ` · ${time(task.closed_at)}`}
           </p>}
           <div className="flex gap-2 flex-wrap mt-3">
-            {task.order_id && <button className="btn-ghost text-sm" disabled={!!reading || !canOpen} onClick={() => { void onOpen(task) }}>פתח משימה · {task.item_location}</button>}
+            {task.order_id && <button className="btn-ghost text-sm" disabled={!!reading || !canOpen(task)} onClick={() => { void onOpen(task) }}>פתח משימה · {task.item_location}</button>}
             {!task.first_read_at && <button className="btn-ghost text-sm" disabled={!!reading} onClick={() => { void read(task) }}>סמן כנקראה · {task.item_location}</button>}
           </div>
-          {!canOpen && <p className="text-xs text-slate-500 mt-1">אין הרשאת כניסה למסך המשימה.</p>}
+          {!canOpen(task) && <p className="text-xs text-slate-500 mt-1">אין הרשאת כניסה למסך המשימה.</p>}
         </article>)}
       </div>
       {feed.has_more && <div className="p-3 border-t shrink-0"><button className="btn-ghost w-full text-sm" disabled={loading} onClick={onMore}>טען עוד משימות</button></div>}
@@ -78,12 +78,12 @@ export default function ProductionNotificationBell() {
   const [count,setCount]=useState(50)
   const notifications=useProductionNotifications(open,state,count)
   if (!notifications.enabled) return null
+  const access={ production:production && ['admin','office'].includes(profile?.role ?? ''),items,orderDetail }
   const openTask = async (task:ProductionTask) => {
-    const path=production && ['admin','office'].includes(profile?.role ?? '') ? `/production?order=${task.order_id}`
-      : items ? `/items?order=${task.order_id}` : orderDetail ? `/orders/${task.order_id}` : null
+    const path=productionTaskPath(task,access)
     if (!path || !await notifications.read(task)) return
     setOpen(false)
-    navigate(`${path}#item-${task.item_key}`)
+    navigate(path)
   }
   return <>
     <button className="relative rounded-md p-2 hover:bg-white/10 shrink-0" aria-haspopup="dialog" aria-expanded={open}
@@ -94,7 +94,7 @@ export default function ProductionNotificationBell() {
       {notifications.error && <span className="absolute top-0 right-0 rounded-full bg-amber-400 text-slate-900 text-[10px] px-1" aria-label="שגיאה בטעינת התראות">!</span>}
     </button>
     {open && <NotificationPanel notifications={notifications} state={state} onState={next => { setState(next); setCount(50) }}
-      canOpen={(production && ['admin','office'].includes(profile?.role ?? '')) || items || orderDetail}
+      canOpen={task => productionTaskPath(task,access)!==null}
       onMore={() => setCount(previous => previous+50)} onClose={() => setOpen(false)} onOpen={openTask} />}
   </>
 }

@@ -453,5 +453,45 @@ try {
     assert.equal(api.calls,0)
     assert.equal((await snapshot(api.db)).find(item => item.id===ids.curtain).item_status,'new')
   },'/items',null,['production']))
+  for (const reason of ['order_cancelled','payment_not_approved','item_deleted']) {
+    await test(`history link ${reason}: authorized order detail, no missing-item anchor or business writes`,() => session('office',mobile,async api => {
+      const task=(await api.db.query("select id from public.production_tasks where item_key=$1 and status='active'",[ids.curtain])).rows[0].id
+      await api.act(tx => reason==='order_cancelled'
+        ? tx.query("update public.orders set status='cancelled' where id=$1",[orders.mixed])
+        : reason==='payment_not_approved'
+        ? tx.query("update public.orders set payment_approved=false,status='waiting_payment' where id=$1",[orders.mixed])
+        : tx.query('delete from public.order_items where id=$1',[ids.curtain]))
+      const before=await snapshot(api.db)
+      await api.page.getByRole('button',{ name:/התראות ייצור/ }).click()
+      const dialog=api.page.getByRole('dialog',{ name:'משימות ייצור' })
+      await dialog.getByRole('button',{ name:'הושלמו ובוטלו',exact:true }).click()
+      const history=dialog.locator(`[data-task-id="${task}"]`)
+      await history.getByRole('button',{ name:'פתח משימה · curtain',exact:true }).click()
+      const hash=reason==='item_deleted' ? '' : `#item-${ids.curtain}`
+      await api.page.waitForURL(`**/orders/${orders.mixed}${hash}`)
+      await api.page.getByRole('button',{ name:'הוראות עבודה',exact:true }).waitFor()
+      if (reason==='item_deleted') {
+        assert.equal(new URL(api.page.url()).hash,'')
+        assert.equal(await api.page.locator(`#item-${ids.curtain}`).count(),0)
+      } else {
+        await api.page.waitForFunction(id => document.activeElement?.id===`item-${id}`,ids.curtain)
+        await api.page.locator(`#item-${ids.curtain}`).waitFor()
+      }
+      assert.deepEqual(await snapshot(api.db),before)
+      assert.equal(api.calls,0)
+      assert.equal(api.readCalls,1)
+      assert.equal((await api.db.query('select close_reason from public.production_tasks where id=$1',[task])).rows[0].close_reason,reason)
+    }))
+  }
+  await test('history order-detail permission denied: active list permission cannot override it',() => session('office',mobile,async api => {
+    await api.act(tx => tx.query("update public.orders set status='cancelled' where id=$1",[orders.mixed]))
+    await api.page.getByRole('button',{ name:/התראות ייצור/ }).click()
+    const dialog=api.page.getByRole('dialog',{ name:'משימות ייצור' })
+    await dialog.getByRole('button',{ name:'הושלמו ובוטלו',exact:true }).click()
+    const button=dialog.getByRole('button',{ name:'פתח משימה · curtain',exact:true })
+    await button.waitFor()
+    assert.equal(await button.isDisabled(),true)
+    assert.equal(api.readCalls,0)
+  },'/production',null,['orderDetail']))
   console.log(`${passed} browser suites passed; local authenticated SQL adapter; desktop/mobile print screenshots saved.`)
 } finally { await browser.close(); await new Promise(r => server.close(r)) }

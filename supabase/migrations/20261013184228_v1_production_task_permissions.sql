@@ -59,6 +59,12 @@ create function production_private.guard_item() returns trigger
 language plpgsql security invoker set search_path = '' as $$
 declare actor public.profiles; parent public.orders; production_change boolean;
 begin
+  -- BEFORE INSERT runs before the new item exists. Lock the parent first, also
+  -- for backend inserts, so an approval/status UPDATE either sees this item or
+  -- commits before the item notification reads the parent's current state.
+  if tg_op = 'INSERT' then
+    select * into parent from public.orders where id = new.order_id for update;
+  end if;
   -- Backend integrations with no end-user identity keep their existing path.
   if auth.uid() is null then
     if current_user in ('anon','authenticated') then raise exception 'Authentication required' using errcode='42501'; end if;

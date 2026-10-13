@@ -36,6 +36,19 @@ export const PRODUCTION_REFRESH_EVENT = 'production-data-changed'
 export const NOTIFICATION_REFRESH_MS = 30_000
 export const emptyNotificationFeed: NotificationFeed = { tasks:[], active_total:0, unread_active:0, has_more:false }
 
+export function productionTaskPath(task: ProductionTask, access: { production:boolean; items:boolean; orderDetail:boolean }): string | null {
+  if (!task.order_id) return null
+  // Production/items list only active orders. History must use the unrestricted
+  // order-detail view, with its existing screen permission and order RLS.
+  const history = task.status !== 'active' || !task.order_item_id || task.close_reason === 'item_deleted'
+  const path = history ? (access.orderDetail ? `/orders/${task.order_id}` : null)
+    : access.production ? `/production?order=${task.order_id}`
+    : access.items ? `/items?order=${task.order_id}`
+    : access.orderDetail ? `/orders/${task.order_id}` : null
+  if (!path) return null
+  return task.order_item_id && task.close_reason !== 'item_deleted' ? `${path}#item-${task.order_item_id}` : path
+}
+
 export async function fetchProductionNotifications(state: 'active' | 'history', count: number, signal: AbortSignal): Promise<NotificationFeed> {
   const tasks: ProductionTask[] = []
   let cursor: ProductionTask | undefined, result = emptyNotificationFeed

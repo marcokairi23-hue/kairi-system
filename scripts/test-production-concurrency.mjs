@@ -5,7 +5,7 @@ import { resolve, join } from 'node:path'
 import { tmpdir } from 'node:os'
 import { createServer } from 'node:net'
 import pg from '../.v1-test-deps/node_modules/pg/lib/index.js'
-import { createProductionTestDb, actors, ids, rpc } from './production-test-db.mjs'
+import { createProductionTestDb, actors, ids, rpc, uid } from './production-test-db.mjs'
 
 // Wait on process exit, not inherited pipe closure: Windows pg_ctl leaves a
 // pipe handle with its server child even after pg_ctl exits successfully.
@@ -141,7 +141,33 @@ try {
   assert.equal((await observer.query('select count(*)::int as n from public.production_tasks where item_key=$1 and from_status=$2 and status=$3',[ids.other,'preparation','completed'])).rows[0].n,0)
   console.log('PASS financial approval withdrawal versus waiting RPC cancels task and rejects business action atomically')
   assert.equal((await observer.query('select count(*)::int as n from (select item_key from public.production_tasks where status=$1 group by item_key having count(*)>1) duplicates',['active'])).rows[0].n,0)
-  console.log('9 real concurrency suites passed; authenticated identities; local PostgreSQL will be stopped.')
+  let fixture = 0
+  for (const change of ['approval','activation']) for (const first of ['insert','order']) {
+    const orderId=uid(900+fixture),itemId=uid(950+fixture++)
+    await observer.query(`insert into public.orders(id,agent_id,customer_name_snapshot,status,payment_approved,final_total)
+      values($1,$2,'synthetic insert race',$3::public.order_status,$4,0)`,
+      [orderId,actors.sales,change==='approval' ? 'new_execution' : 'quote',change!=='approval'])
+    await begin(a,actors.office); await begin(b,actors.otherOffice)
+    const insert=client => client.query(`insert into public.order_items(id,order_id,family,location,width_m,heights_m,for_execution)
+      values($1,$2,'curtain','synthetic concurrent insert',2,array[2.5],true)`,[itemId,orderId])
+    const update=client => client.query(change==='approval'
+      ? 'update public.orders set payment_approved=true where id=$1'
+      : "update public.orders set status='new_execution' where id=$1",[orderId])
+    await (first==='insert' ? insert(a) : update(a))
+    const pending=(first==='insert' ? update(b) : insert(b)).then(value => ({ value }),error => ({ error }))
+    await blocked(observer,b)
+    await a.query('commit')
+    const result=await pending
+    assert.equal(result.error,undefined)
+    await b.query('commit')
+    const tasks=(await observer.query('select status,from_status,target_status,instance_no from public.production_tasks where item_key=$1',[itemId])).rows
+    assert.equal(tasks.length,1)
+    assert.deepEqual(tasks[0],{ status:'active',from_status:'new',target_status:'preparation',instance_no:1 })
+    assert.equal((await observer.query('select item_status::text,production_version from public.order_items where id=$1',[itemId])).rows[0].item_status,'new')
+    assert.equal((await observer.query('select count(*)::int as n from public.order_status_history where order_item_id=$1',[itemId])).rows[0].n,0)
+    console.log(`PASS authenticated INSERT/${change}, ${first} first: parent lock serializes both commits; exactly one eligible task`)
+  }
+  console.log('13 real concurrency suites passed; authenticated identities; local PostgreSQL will be stopped.')
 } finally {
   await Promise.allSettled(clients.map(client => client.end()))
   if (started) await run(join(bin,'pg_ctl.exe'),['-D',data,'-m','fast','-w','-t','30','stop'],options)
