@@ -12,7 +12,7 @@ async function recipient(db,task,user) { return (await db.query('select * from p
 await test('initialization creates only notification metadata, leaving existing orders/items/history unchanged',async db => {
   const before=[]
   for (const table of ['orders','order_items','payments','order_status_history']) before.push((await db.query(`select * from public.${table} order by id`)).rows)
-  await db.exec(readFileSync(new URL('../supabase/migrations/20261013213750_production_notifications_v1.sql',import.meta.url),'utf8'))
+  await db.exec(readFileSync(new URL('../supabase/migrations/20261013235303_production_notifications_v1.sql',import.meta.url),'utf8'))
   const after=[]
   for (const table of ['orders','order_items','payments','order_status_history']) after.push((await db.query(`select * from public.${table} order by id`)).rows)
   assert.deepEqual(after,before)

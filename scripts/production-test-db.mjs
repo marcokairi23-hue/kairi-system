@@ -32,8 +32,8 @@ export async function createProductionTestDb(db = new PGlite(), { notifications 
     catch (error) { throw new Error(`Baseline ${name}: ${error.message}`, { cause: error }) }
   }
   await db.exec('grant all on all tables in schema public to authenticated; grant usage,select on all sequences in schema public to authenticated;')
-  await db.exec(readFileSync(new URL('../supabase/migrations/20261013184228_v1_production_task_permissions.sql', import.meta.url), 'utf8'))
-  if (notifications) await db.exec(readFileSync(new URL('../supabase/migrations/20261013213750_production_notifications_v1.sql', import.meta.url), 'utf8'))
+  await db.exec(readFileSync(new URL('../supabase/migrations/20261013235255_v1_production_task_permissions.sql', import.meta.url), 'utf8'))
+  if (notifications) await db.exec(readFileSync(new URL('../supabase/migrations/20261013235303_production_notifications_v1.sql', import.meta.url), 'utf8'))
   for (const [role, id] of Object.entries(actors)) {
     await db.query('insert into auth.users(id,email) values($1,$2)', [id, `${role}@example.invalid`])
     await db.query('update public.profiles set full_name=$2,role=$3::public.user_role,is_active=$4 where id=$1',

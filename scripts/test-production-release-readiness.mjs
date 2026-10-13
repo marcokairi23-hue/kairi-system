@@ -62,7 +62,7 @@ try {
   }
   const before = await businessRows()
   await test('both pending migrations install against captured live production contract', async () => {
-    for (const file of ['20261013184228_v1_production_task_permissions.sql', '20261013213750_production_notifications_v1.sql']) {
+    for (const file of ['20261013235255_v1_production_task_permissions.sql', '20261013235303_production_notifications_v1.sql']) {
       await db.exec(readFileSync(new URL(`../supabase/migrations/${file}`, import.meta.url), 'utf8'))
     }
   })
