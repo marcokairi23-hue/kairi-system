@@ -3,6 +3,7 @@ import { NavLink } from 'react-router-dom'
 import { useAuth } from '../lib/auth'
 import { useFeature } from '../lib/featureFlags'
 import { Wallet, House, ClipboardList, Package, Factory, PanelsTopLeft, History } from 'lucide-react'
+import ProductionNotificationBell from './ProductionNotificationBell'
 
 interface NavItem { to: string; label: string; end?: boolean; featureKey?: string; icon?: ReactNode }
 
@@ -64,6 +65,7 @@ export default function Layout({ children }: { children: ReactNode }) {
             ))}
           </nav>
           <div className="flex items-center gap-2 text-sm shrink-0">
+            <ProductionNotificationBell />
             <span className="hidden sm:inline text-white/80 text-xs">{profile?.full_name}</span>
             <button onClick={signOut} className="rounded-md px-2 py-1.5 hover:bg-white/10 text-xs">
               יציאה

@@ -1,12 +1,12 @@
-import { useState } from 'react'
+import { useRef, useState } from 'react'
 import { Printer } from 'lucide-react'
-import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/auth'
 import {
-  ITEM_STATUS_LABELS, ITEM_STATUS_COLORS, ITEM_STATUS_ORDER, SHADING_LABELS, canTransitionItemStatus,
+  ITEM_STATUS_LABELS, ITEM_STATUS_COLORS, ITEM_STATUS_ORDER, SHADING_LABELS,
 } from '../../lib/statusHelpers'
-import { printWorkOrder } from '../items/printWork'
-import { recalculateOrderStatus } from '../../lib/recalculateOrderStatus'
+import WorkPrintDialog, { workPrintItems } from '../items/WorkPrintDialog'
+import { advanceProductionItems } from '../../lib/productionActions'
+import { nextProductionSelection, productionNext, productionSelection } from '../../lib/productionPermissions'
 
 export interface DialogItem {
   id: string
@@ -16,6 +16,7 @@ export interface DialogItem {
   width_m: number
   heights_m: number[]
   item_status: string
+  production_version: number
   for_execution: boolean
   issue_kind?: string | null
   // שדות נוספים — נדרשים רק לשם הדפסת דוח עבודה (printWorkOrder), לא לתצוגת הדיאלוג עצמה
@@ -34,109 +35,72 @@ interface Props {
   orderId: string
   orderNumber: number | string
   customerName: string
+  orderStatus: string
+  paymentApproved: boolean | null | undefined
   items: DialogItem[]
   onClose: () => void
   onSaved: () => void
 }
 
 export default function ItemStatusDialog({
-  orderId, orderNumber, customerName, items, onClose, onSaved,
+  orderId, orderNumber, customerName, orderStatus, paymentApproved, items, onClose, onSaved,
 }: Props) {
   const { profile } = useAuth()
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [newStatus, setNewStatus] = useState('')
   const [busy, setBusy] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [printOpen, setPrintOpen] = useState(false)
+  const operationLock = useRef(false)
 
-  const active = items.filter(i => orderId && i.id && i.for_execution && ITEM_STATUS_ORDER.some(s => s === i.item_status))
+  const active = items.filter(i => orderId && i.id)
+  const actionable = active.map(item => ({ ...item, order_id:orderId, orders:{ status:orderStatus, payment_approved:paymentApproved } }))
+  const eligible = productionSelection(actionable,profile)
   const allowedStatuses = ITEM_STATUS_ORDER.filter(status => selected.size > 0 && Array.from(selected).every(id => {
-    const item = active.find(i => i.id === id)
-    return !!item && !(status === 'done' && item.issue_kind) && canTransitionItemStatus(item.item_status, status)
+    const item = actionable.find(i => i.id === id)
+    return !!item && productionNext(item,profile) === status
   }))
-  const allSelected = active.length > 0 && selected.size === active.length
+  const allSelected = eligible.length > 0 && selected.size === eligible.length
 
   const toggle = (id: string) => {
-    const next = new Set(selected)
-    next.has(id) ? next.delete(id) : next.add(id)
+    if (operationLock.current || !eligible.some(item => item.id === id)) return
+    const next = nextProductionSelection(selected,[id])
+    if (!next) { setError('ניתן לבחור עד 200 פריטים לקידום בפעולה אחת.'); return }
     setSelected(next)
   }
 
   const toggleAll = () => {
-    setSelected(allSelected ? new Set() : new Set(active.map(i => i.id)))
+    if (operationLock.current) return
+    const next = nextProductionSelection(selected,eligible.map(item => item.id))
+    if (!next) { setError('יותר מ־200 פריטים זמינים. בחרו ידנית עד 200.'); return }
+    setSelected(next)
   }
 
   const apply = async () => {
-    if (!allowedStatuses.some(s => s === newStatus)) return
-    setBusy(true); setError(null)
-
-    const ids = Array.from(selected)
-
-    const { error: err } = await supabase
-      .from('order_items')
-      .update({ item_status: newStatus })
-      .in('id', ids)
-
-    if (err) {
-      setError('שגיאה בעדכון: ' + err.message)
-      setBusy(false)
-      return
+    if (operationLock.current || !allowedStatuses.includes(newStatus as never)) return
+    const chosen = eligible.filter(item => selected.has(item.id))
+    if (chosen.length !== selected.size || chosen.length > 200 || !chosen.length) {
+      setError('ניתן לקדם עד 200 פריטים מורשים בפעולה אחת.'); return
     }
-
-    // רישום בהיסטוריה
-    await supabase.from('order_status_history').insert(
-      ids.map(itemId => ({
-        order_id: orderId,
-        order_item_id: itemId,
-        to_status: newStatus,
-        changed_by: profile?.id ?? null,
-        note: 'עדכון גורף מתוך רשימת ההזמנות',
-      }))
-    )
-
+    operationLock.current = true; setBusy(true); setError(null)
     try {
-      await recalculateOrderStatus(orderId, profile?.id ?? null)
-    } catch {
-      setError('הפריטים עודכנו, אך חישוב סטטוס ההזמנה נכשל. יש לרענן את ההזמנה.')
-      setBusy(false)
-      return
-    }
-    onSaved()
-    onClose()
+      await advanceProductionItems(chosen, newStatus)
+      onSaved(); onClose()
+    } catch (error) {
+      setSelected(new Set())
+      setError('לא התקבל אישור לפעולה. יש לסגור ולרענן לפני ניסיון נוסף. ' + (error as { message?: string }).message)
+    } finally { operationLock.current = false; setBusy(false) }
   }
 
-  const doPrintWork = () => {
-    if (selected.size === 0) return
-    const chosen = active.filter(i => selected.has(i.id))
-    printWorkOrder(chosen.map(i => ({
-      family: i.family,
-      subtype: i.subtype ?? null,
-      location: i.location,
-      width_m: i.width_m,
-      heights_m: i.heights_m,
-      sewing_type: i.sewing_type ?? null,
-      hem_cm: i.hem_cm ?? null,
-      shtaif_cm: i.shtaif_cm ?? null,
-      is_split: i.is_split ?? null,
-      fabric_text: i.fabric_text ?? null,
-      mount_type: i.mount_type ?? null,
-      mechanism_side: i.mechanism_side ?? null,
-      color_fabric_text: i.color_fabric_text ?? null,
-      notes: i.notes ?? null,
-      orders: {
-        order_number: typeof orderNumber === 'number' ? orderNumber : null,
-        customer_name_snapshot: customerName,
-      },
-    })))
-  }
-
+  const doPrintWork = () => setPrintOpen(true)
   const itemLabel = (item: DialogItem) => {
     if (item.family === 'curtain') return 'וילון'
     return SHADING_LABELS[item.subtype ?? ''] ?? item.subtype ?? 'הצללה'
   }
 
   return (
-    <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
-         onClick={onClose}>
+    <><div className="fixed inset-0 bg-black/50 flex items-center justify-center z-50 p-4"
+         onClick={() => { if (!operationLock.current) onClose() }}>
       <div className="bg-white rounded-2xl w-full max-w-md max-h-[85vh] flex flex-col"
            onClick={e => e.stopPropagation()}>
 
@@ -151,9 +115,9 @@ export default function ItemStatusDialog({
         {/* בחר הכל */}
         <div className="px-5 py-2 border-b bg-slate-50">
           <label className="flex items-center gap-2 text-sm font-medium cursor-pointer">
-            <input type="checkbox" checked={allSelected} onChange={toggleAll}
+            <input type="checkbox" checked={allSelected} onChange={toggleAll} disabled={busy || !eligible.length}
                    className="w-4 h-4" />
-            בחר הכל ({active.length} פריטים)
+            בחר פריטים מותרים ({eligible.length})
           </label>
         </div>
 
@@ -169,7 +133,7 @@ export default function ItemStatusDialog({
                    className={`flex items-center gap-3 p-3 cursor-pointer hover:bg-slate-50 ${
                      selected.has(item.id) ? 'bg-brand-light' : ''
                    }`}>
-              <input type="checkbox" checked={selected.has(item.id)}
+              <input type="checkbox" checked={selected.has(item.id)} disabled={busy || !eligible.some(i => i.id === item.id)} aria-label={`בחר ${item.location}`}
                      onChange={() => toggle(item.id)} className="w-4 h-4 shrink-0" />
               <div className="flex-1 min-w-0">
                 <div className="text-sm font-medium truncate">
@@ -193,12 +157,12 @@ export default function ItemStatusDialog({
 
         {/* פעולה */}
         <div className="p-4 border-t bg-slate-50 rounded-b-2xl">
-          {error && <div className="text-red-600 text-sm mb-2">{error}</div>}
+          {error && <div role="alert" className="text-red-600 text-sm mb-2">{error}</div>}
 
           <div className="flex items-center gap-2">
             <select className="input flex-1" value={newStatus}
                     onChange={e => setNewStatus(e.target.value)}
-                    disabled={selected.size === 0}>
+                    disabled={busy || selected.size === 0}>
               <option value="">שנה סטטוס ל...</option>
               {allowedStatuses.map(s => (
                 <option key={s} value={s}>{ITEM_STATUS_LABELS[s]}</option>
@@ -211,21 +175,22 @@ export default function ItemStatusDialog({
             </button>
           </div>
 
-          {/* הדפסת דוח עבודה על הפריטים המסומנים — אותו מסמך כמו במסך "פריטים" (printWork.ts),
-              נבחן זמנית לצד כפתור "קדם" ב-OrderActions כדי להשוות שימוש בפועל בין השניים. */}
+          {/* Print selection is independent of permission to advance a task. */}
           <button className="w-full flex items-center justify-center gap-1.5 text-sm
                              text-brand hover:underline mt-3 disabled:text-slate-300 disabled:no-underline"
-                  disabled={selected.size === 0}
+                  disabled={busy || !active.length}
                   onClick={doPrintWork}>
-            <Printer className="w-4 h-4" /> הדפסת דוח עבודה ({selected.size})
+            <Printer className="w-4 h-4" /> הדפסת דוח עבודה
           </button>
 
           <button className="w-full text-center text-sm text-slate-500 hover:text-slate-700 mt-3"
-                  onClick={onClose}>
+                  disabled={busy} onClick={onClose}>
             סגור
           </button>
         </div>
       </div>
     </div>
+    {printOpen && <WorkPrintDialog items={workPrintItems(items,{ id:orderId, order_number:typeof orderNumber === 'number' ? orderNumber : null, customer_name_snapshot:customerName, status:orderStatus, payment_approved:paymentApproved })} onClose={() => setPrintOpen(false)} />}
+    </>
   )
 }

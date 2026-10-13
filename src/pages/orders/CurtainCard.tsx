@@ -96,7 +96,11 @@ export default function CurtainCard({ item, index, onChange, onRemove, creationM
                  placeholder="שם הבד / קוד" />
         </Field>
 
-        {!creationMode && item.db_id && item.for_execution && ITEM_STATUSES.some(s => s.value === item.item_status) && <Field label="סטטוס">
+        {editMode && item.db_id && <Field label="סטטוס">
+          <div className="text-sm py-2">{ITEM_STATUSES.find(s => s.value === item.item_status)?.label ?? item.item_status}</div>
+          <p className="text-xs text-slate-500">קידום משימה דרך פעולות הפריטים או לוח הייצור.</p>
+        </Field>}
+        {!creationMode && !editMode && item.db_id && item.for_execution && ITEM_STATUSES.some(s => s.value === item.item_status) && <Field label="סטטוס">
           <select className="input" value={item.item_status}
                   onChange={e => { if (canTransitionItemStatus(item.item_status, e.target.value)) set('item_status', e.target.value as CurtainItem['item_status']) }}>
             {ITEM_STATUSES.filter(s => s.value === item.item_status || canTransitionItemStatus(item.item_status, s.value)).map(s => <option key={s.value} value={s.value}>{s.label}</option>)}

@@ -8,18 +8,17 @@ interface Props {
   onPrintWork: () => void
   onClear: () => void
   allowedStatuses: readonly string[]
+  disabled?: boolean
 }
 
-export default function BulkActionBar({ count, onApplyStatus, onPrintWork, onClear, allowedStatuses }: Props) {
+export default function BulkActionBar({ count, onApplyStatus, onPrintWork, onClear, allowedStatuses, disabled = false }: Props) {
   const [status, setStatus] = useState('')
   const [busy, setBusy] = useState(false)
 
   const apply = async () => {
-    if (!allowedStatuses.includes(status)) return
+    if (disabled || count > 200 || !allowedStatuses.includes(status)) return
     setBusy(true)
-    await onApplyStatus(status)
-    setStatus('')
-    setBusy(false)
+    try { await onApplyStatus(status); setStatus('') } finally { setBusy(false) }
   }
 
   if (count === 0) return null
@@ -33,7 +32,7 @@ export default function BulkActionBar({ count, onApplyStatus, onPrintWork, onCle
             {count} נבחרו
           </span>
 
-          <select className="input flex-1 min-w-[120px]" value={status}
+          <select className="input flex-1 min-w-[120px]" value={status} disabled={disabled || busy}
                   onChange={e => setStatus(e.target.value)}>
             <option value="">שנה סטטוס ל...</option>
             {ITEM_STATUS_ORDER.filter(s => allowedStatuses.includes(s)).map(s => (
@@ -42,11 +41,11 @@ export default function BulkActionBar({ count, onApplyStatus, onPrintWork, onCle
           </select>
 
           <button className="btn-primary shrink-0 text-sm py-2"
-                  disabled={!allowedStatuses.includes(status) || busy} onClick={apply}>
+                  disabled={disabled || count > 200 || !allowedStatuses.includes(status) || busy} onClick={apply}>
             {busy ? '...' : 'עדכן'}
           </button>
 
-          <button className="btn-ghost shrink-0 text-sm py-2" onClick={onPrintWork}>
+          <button className="btn-ghost shrink-0 text-sm py-2" disabled={disabled || busy} onClick={onPrintWork}>
             <Wrench size={16} className="inline-block me-1" aria-hidden="true" /> הוראות עבודה
           </button>
 

@@ -14,6 +14,7 @@ import {
   ORDER_STATUS_NEXT, ORDER_TO_ITEM_STATUS, suggestOrderStatus, fmt, displayedOrderStatus,
 } from '../../lib/statusHelpers'
 import { recalculateOrderStatus } from '../../lib/recalculateOrderStatus'
+import { advanceProductionItems } from '../../lib/productionActions'
 
 type Order = ActionOrder & { created_at: string }
 type SortKey = 'order_number' | 'customer' | 'created_at' | 'total' | 'status'
@@ -150,6 +151,14 @@ export default function OrdersList() {
     syncItemsToo: boolean,
     itemStatus: string | null
   ) => {
+    // Production changes and derived order history commit together on the server.
+    if (syncItemsToo && itemStatus) {
+      const chosen = (order.order_items ?? []).filter(item => item.for_execution && item.item_status !== 'cancelled')
+      if (chosen.length) await advanceProductionItems(chosen, itemStatus)
+      setSyncItems(null)
+      await load()
+      return
+    }
     // עדכון ההזמנה
     await supabase.from('orders').update({ status: newStatus }).eq('id', order.id)
     await supabase.from('order_status_history').insert({
@@ -159,29 +168,6 @@ export default function OrdersList() {
       changed_by: profile?.id ?? null,
       note: 'קידום מהרשימה',
     })
-
-    // עדכון הפריטים (אם ביקשו)
-    if (syncItemsToo && itemStatus) {
-      const ids = (order.order_items ?? [])
-        .filter(i => i.for_execution && i.item_status !== 'cancelled')
-        .map(i => i.id)
-
-      if (ids.length) {
-        await supabase.from('order_items')
-          .update({ item_status: itemStatus })
-          .in('id', ids)
-
-        await supabase.from('order_status_history').insert(
-          ids.map(itemId => ({
-            order_id: order.id,
-            order_item_id: itemId,
-            to_status: itemStatus,
-            changed_by: profile?.id ?? null,
-            note: 'סנכרון אוטומטי עם סטטוס ההזמנה',
-          }))
-        )
-      }
-    }
 
     setSyncItems(null)
     await load()
@@ -454,6 +440,8 @@ export default function OrdersList() {
           orderId={itemsOrder.id}
           orderNumber={itemsOrder.order_number ?? 'טיוטה'}
           customerName={itemsOrder.customer_name_snapshot}
+          orderStatus={itemsOrder.status}
+          paymentApproved={itemsOrder.payment_approved}
           items={(itemsOrder.order_items ?? []) as DialogItem[]}
           onClose={() => setItemsOrder(null)}
           onSaved={() => afterItemsUpdate(itemsOrder.id)}

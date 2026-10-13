@@ -9,7 +9,7 @@ import {
   OrderForm, emptyForm,
   calcItemsTotal, calcTotalWidth, calcAutoTotal, calcRemaining,
   SEWING_TYPES, SHADING_SUBTYPES, CurtainItem, ShadingItem, OrderAccessory,
-  newCurtainItem, newShadingItem, ITEM_STATUSES,
+  newCurtainItem, newShadingItem,
 } from './types'
 import { Field, SummaryBox, BlockHeader } from './FormFields'
 import CurtainCard from './CurtainCard'
@@ -198,7 +198,7 @@ export default function EditOrder() {
           fabric_text: item.fabric_text || null,
           price: parseFloat(item.price) || 0,
           for_execution: item.for_execution,
-          ...(!item.db_id ? { item_status: 'new' } : item.for_execution && ITEM_STATUSES.some(s => s.value === item.item_status) ? { item_status: item.item_status } : {}),
+          ...(!item.db_id ? { item_status: 'new' } : {}),
           notes: item.notes || null,
           sort_order: sortOrder++,
         }
@@ -222,7 +222,7 @@ export default function EditOrder() {
           color_fabric_text: item.color_fabric_text || null,
           price: parseFloat(item.price) || 0,
           for_execution: item.for_execution,
-          ...(!item.db_id ? { item_status: 'new' } : item.for_execution && ITEM_STATUSES.some(s => s.value === item.item_status) ? { item_status: item.item_status } : {}),
+          ...(!item.db_id ? { item_status: 'new' } : {}),
           notes: item.notes || null,
           sort_order: sortOrder++,
         }

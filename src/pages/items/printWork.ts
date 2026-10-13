@@ -1,6 +1,6 @@
 import { SHADING_LABELS } from '../../lib/statusHelpers'
 
-interface WorkItem {
+export interface WorkItem {
   family: string
   subtype: string | null
   location: string

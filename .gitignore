@@ -5,3 +5,6 @@ dist/
 .DS_Store
 .env.local
 supabase/.temp/
+.v1-build/
+.v1-test-deps/
+.v1-test-output/

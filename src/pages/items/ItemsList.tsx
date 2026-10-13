@@ -1,13 +1,16 @@
-import { useEffect, useMemo, useState } from 'react'
-import { useNavigate } from 'react-router-dom'
+import { useEffect, useMemo, useRef, useState } from 'react'
+import { useNavigate, useSearchParams } from 'react-router-dom'
+import { useItemDeepLink } from '../../lib/useItemDeepLink'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/auth'
 import BulkActionBar from './BulkActionBar'
 import {
-  ITEM_STATUS_LABELS, ITEM_STATUS_COLORS, ITEM_STATUS_ORDER, SHADING_LABELS, canTransitionItemStatus,
+  ITEM_STATUS_LABELS, ITEM_STATUS_COLORS, ITEM_STATUS_ORDER, SHADING_LABELS,
   ITEM_ROUTE_LABELS, ItemRoute, getItemRoute, ACTIVE_ORDER_STATUSES,
 } from '../../lib/statusHelpers'
-import { printWorkOrder } from './printWork'
+import WorkPrintDialog from './WorkPrintDialog'
+import { advanceProductionItems } from '../../lib/productionActions'
+import { canPrintProduction, nextProductionSelection, productionNext, productionSelection } from '../../lib/productionPermissions'
 import SyncOrderDialog from '../orders/SyncOrderDialog'
 import ItemAdvanceDialog from '../orders/ItemAdvanceDialog'
 import { suggestOrderStatus } from '../../lib/statusHelpers'
@@ -34,6 +37,7 @@ interface Item {
   price: number
   for_execution: boolean
   item_status: string
+  production_version: number
   issue_kind?: string | null
   notes: string | null
   sort_order?: number
@@ -41,6 +45,7 @@ interface Item {
     order_number: number | null
     customer_name_snapshot: string
     status: string
+    payment_approved: boolean | null
     created_at: string
     profiles?: { full_name: string }
   }
@@ -66,6 +71,8 @@ const TYPE_GROUP_ORDER = ['וילון', 'זברה', 'ונציאני', 'רומי'
 
 export default function ItemsList() {
   const navigate = useNavigate()
+  const [searchParams]=useSearchParams()
+  const linkedOrder=searchParams.get('order')
   const { profile } = useAuth()
   const [items, setItems] = useState<Item[]>([])
   const [loading, setLoading] = useState(true)
@@ -76,6 +83,13 @@ export default function ItemsList() {
   const [search, setSearch] = useState('')
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [err, setErr] = useState<string | null>(null)
+  const [busy, setBusy] = useState(false)
+  const [printOpen, setPrintOpen] = useState(false)
+  const operationLock = useRef(false)
+  const loadingLock = useRef(true)
+  const loadVersion = useRef(0)
+  useItemDeepLink(!loading)
+  useEffect(() => { setActiveTab('all'); setActiveRoute('all'); setSearch(''); setSelected(new Set()) },[linkedOrder])
   const [syncQueue, setSyncQueue] = useState<Array<{
     orderId: string
     orderNumber: number | null
@@ -86,24 +100,39 @@ export default function ItemsList() {
     count: number
   }>>([])
 
-  const load = async () => {
+  const load = async (clearError = true) => {
+    const version = ++loadVersion.current
+    loadingLock.current = true
+    setSelected(new Set())
     setLoading(true)
-    const { data, error } = await supabase
-      .from('order_items')
-      .select('*, orders(order_number, customer_name_snapshot, status, created_at, profiles!orders_agent_id_fkey(full_name))')
-
-    if (error) {
-      console.error('שגיאה בטעינת פריטים:', error)
-      setErr('לא ניתן לטעון את הפריטים: ' + error.message)
+    const data: Item[] = []
+    try {
+      let cursor: string | null = null
+      while (true) {
+        let query = supabase.from('order_items')
+          .select('*, orders!inner(order_number, customer_name_snapshot, status, payment_approved, created_at, profiles!orders_agent_id_fkey(full_name))')
+          .order('id').limit(500)
+        if (cursor) query = query.gt('id', cursor)
+        const { data: page, error } = await query
+        if (version !== loadVersion.current) return
+        if (error) throw error
+        if (!page?.length) break
+        data.push(...(page as Item[]))
+        cursor = page[page.length - 1].id
+      }
+    } catch (error) {
+      if (version !== loadVersion.current) return
+      setItems([])
+      setErr('לא ניתן לטעון את הפריטים: ' + (error as { message: string }).message)
       setLoading(false)
+      loadingLock.current = false
       return
     }
 
     // הזמנה עדיין לא פעילה (draft/quote/pending_payment/cancelled) — הפריט לא אמור להופיע
     // כאן עד שההזמנה יצאה מגבייה בפועל (DEFECTS_MAP #20).
-    const active = ((data ?? []) as Item[]).filter(i =>
-      i.id && i.order_id && i.for_execution && ['curtain', 'shading'].includes(i.family) &&
-      ITEM_STATUS_ORDER.some(status => status === i.item_status) && ACTIVE_ORDER_STATUSES.includes(i.orders?.status ?? ''))
+    const active = data.filter(i =>
+      i.id && i.order_id && ACTIVE_ORDER_STATUSES.includes(i.orders?.status ?? ''))
 
     // מיון: הזמנות חדשות קודם (לפי מספר הזמנה יורד)
     const sorted = active.sort((a, b) => {
@@ -114,11 +143,13 @@ export default function ItemsList() {
     })
 
     setItems(sorted)
-    setErr(null)
+    if (clearError) setErr(null)
     setLoading(false)
+    loadingLock.current = false
   }
 
-  useEffect(() => { load() }, [])
+  useEffect(() => { void load(); return () => { loadVersion.current++ } }, [profile?.id])
+  useEffect(() => { setSelected(new Set()) }, [search, activeTab, activeRoute, groupBy, profile])
 
   const itemTypeLabel = (i: Item) =>
     i.family === 'curtain' ? 'וילון' : SHADING_LABELS[i.subtype ?? ''] ?? i.subtype ?? 'הצללה'
@@ -126,6 +157,7 @@ export default function ItemsList() {
   const filtered = useMemo(() => {
     const tab = TABS.find(t => t.key === activeTab)!
     return items.filter(i => {
+      if (linkedOrder && i.order_id!==linkedOrder) return false
       if (i.item_status === 'cancelled' && activeTab !== 'all') return false
       if (tab.statuses.length && (!i.for_execution || !tab.statuses.includes(i.item_status))) return false
       if (activeRoute !== 'all' && getItemRoute(i.family) !== activeRoute) return false
@@ -140,13 +172,13 @@ export default function ItemsList() {
       }
       return true
     })
-  }, [items, activeTab, activeRoute, search])
+  }, [items, activeTab, activeRoute, search,linkedOrder])
 
-  const selectable = filtered.filter(i => i.id && i.order_id && i.for_execution && ITEM_STATUS_ORDER.some(s => s === i.item_status))
+  const selectable = productionSelection(filtered, profile)
   const allSelected = selectable.length > 0 && selectable.every(i => selected.has(i.id))
   const allowedStatuses = ITEM_STATUS_ORDER.filter(status => selected.size > 0 && Array.from(selected).every(id => {
     const item = items.find(i => i.id === id)
-    return !!item?.order_id && item.for_execution && !(status === 'done' && item.issue_kind) && canTransitionItemStatus(item.item_status, status)
+    return !!item && productionNext(item, profile) === status
   }))
 
   // חלוקת filtered לקבוצות תצוגה לפי groupBy — לא משפיע על בחירה/פעולות, רק על הצגה
@@ -205,14 +237,17 @@ export default function ItemsList() {
   }, [filtered, groupBy])
 
   const toggle = (id: string) => {
-    if (!selectable.some(i => i.id === id)) return
-    const next = new Set(selected)
-    next.has(id) ? next.delete(id) : next.add(id)
+    if (operationLock.current || loadingLock.current || !selectable.some(i => i.id === id)) return
+    const next = nextProductionSelection(selected, [id])
+    if (!next) { setErr('ניתן לבחור עד 200 פריטים לקידום בפעולה אחת.'); return }
     setSelected(next)
   }
 
   const toggleAll = () => {
-    setSelected(allSelected ? new Set() : new Set(selectable.map(i => i.id)))
+    if (operationLock.current || loadingLock.current) return
+    const next = nextProductionSelection(selected, selectable.map(item => item.id))
+    if (!next) { setErr('יותר מ־200 פריטים זמינים. בחרו ידנית עד 200; לא נשלחה פעולה מפוצלת.'); return }
+    setSelected(next)
   }
 
   // בדוק לכל הזמנה שהושפעה — האם כל הפריטים באותו סטטוס? אם כן, הוסף להצעת סנכרון.
@@ -251,42 +286,20 @@ export default function ItemsList() {
   }
 
   const applyStatus = async (status: string) => {
-    if (!allowedStatuses.some(s => s === status)) {
-      setErr('ניתן לעדכן רק פריטים לביצוע לשלב הבא במסלול הסטטוסים')
-      return
+    if (operationLock.current || loadingLock.current || !allowedStatuses.includes(status as never)) return
+    const chosen = selectable.filter(item => selected.has(item.id))
+    if (chosen.length !== selected.size || !chosen.length || chosen.length > 200) {
+      setErr('ניתן לקדם עד 200 פריטים מורשים בפעולה אחת.'); return
     }
-    const ids = Array.from(selected)
-    const { error } = await supabase.from('order_items').update({ item_status: status }).in('id', ids)
-    if (error) { setErr('שגיאה בעדכון הפריטים: ' + error.message); return }
-
-    // רישום היסטוריה
-    const rows = ids.map(itemId => {
-      const item = items.find(i => i.id === itemId)
-      return {
-        order_id: item?.order_id,
-        order_item_id: itemId,
-        to_status: status,
-        changed_by: profile?.id ?? null,
-        note: 'עדכון גורף ממסך פריטים',
-      }
-    }).filter(r => r.order_id)
-
-    if (rows.length) await supabase.from('order_status_history').insert(rows)
-
-    // אילו הזמנות הושפעו?
-    const affectedOrderIds = Array.from(new Set(
-      ids.map(id => items.find(i => i.id === id)?.order_id).filter(Boolean) as string[]
-    ))
-
-    setSelected(new Set())
+    operationLock.current = true; setBusy(true); setErr(null)
     try {
-      await checkSyncForOrders(affectedOrderIds)
+      await advanceProductionItems(chosen, status)
       await load()
-    } catch {
-      setErr('הפריטים עודכנו, אך חישוב סטטוס ההזמנה נכשל. יש לרענן את ההזמנה.')
-    }
+    } catch (error) {
+      setErr('לא התקבל אישור לפעולה. יש לבדוק את הנתונים המעודכנים. ' + (error as { message?: string }).message)
+      await load(false)
+    } finally { operationLock.current = false; setBusy(false) }
   }
-
   // אישור קידום הזמנה מהתור
   const confirmSync = async () => {
     const current = syncQueue[0]
@@ -310,21 +323,23 @@ export default function ItemsList() {
 
   const skipSync = () => setSyncQueue(q => q.slice(1))
 
-  const printSelected = () => {
-    const chosen = items.filter(i => selected.has(i.id))
-    printWorkOrder(chosen)
-  }
+  const printSelected = () => setPrintOpen(true)
 
   return (
-    <div className={selected.size > 0 ? 'pb-24' : ''}>
+    <div className={selected.size > 0 ? 'pb-56 sm:pb-28' : ''}>
       <div className="flex items-center justify-between mb-4">
         <h1 className="text-2xl font-bold">פריטים</h1>
         <span className="text-sm text-slate-500">{filtered.length} פריטים</span>
       </div>
 
-      <input className="input mb-4"
+      <div className="flex gap-2 mb-3 flex-wrap">
+        <button className="btn-ghost text-sm" disabled={busy || loading} onClick={() => void load()}>רענן נתונים</button>
+        {linkedOrder && <button className="btn-ghost text-sm" onClick={() => navigate('/items')}>הצג את כל ההזמנות</button>}
+        {canPrintProduction(profile) && <button className="btn-ghost text-sm" disabled={busy || loading || !filtered.length} onClick={printSelected}>הוראות עבודה</button>}
+      </div>
+      <input className="input mb-4" disabled={busy}
              placeholder="חיפוש לפי לקוח, מספר הזמנה, מיקום או בד..."
-             value={search} onChange={e => setSearch(e.target.value)} />
+             value={search} onChange={e => { setSearch(e.target.value); setSelected(new Set()) }} />
 
       {/* טאבי סטטוס */}
       <div className="flex gap-1 overflow-x-auto pb-2 mb-3">
@@ -376,7 +391,7 @@ export default function ItemsList() {
       </div>
 
       {err && (
-        <div className="card p-4 mb-3 text-red-600 text-sm">{err}</div>
+        <div role="alert" className="card p-4 mb-3 text-red-600 text-sm">{err}</div>
       )}
 
       {loading && <div className="text-slate-500">טוען פריטים...</div>}
@@ -394,7 +409,7 @@ export default function ItemsList() {
           {/* בחר הכל */}
           <label className="flex items-center gap-2 px-3 py-2 border-b bg-slate-50
                             text-sm font-medium cursor-pointer">
-            <input type="checkbox" checked={allSelected} onChange={toggleAll}
+            <input type="checkbox" checked={allSelected} onChange={toggleAll} disabled={busy || loading}
                    className="w-4 h-4" />
             בחר הכל
           </label>
@@ -407,12 +422,13 @@ export default function ItemsList() {
               </div>
               <div className="divide-y">
                 {g.items.map(i => (
-                  <div key={i.id}
+                  <div key={i.id} id={`item-${i.id}`} tabIndex={-1} style={{ scrollMarginTop:'4rem' }}
                        className={`flex items-center gap-2 p-3 hover:bg-slate-50 ${
                          selected.has(i.id) ? 'bg-brand-light' : ''
                        }`}>
                     <input type="checkbox" checked={selected.has(i.id)}
-                           disabled={!selectable.some(item => item.id === i.id)}
+                           aria-label={`בחר ${i.location}`}
+                           disabled={busy || loading || !selectable.some(item => item.id === i.id)}
                            onChange={() => toggle(i.id)}
                            className="w-4 h-4 shrink-0" />
 
@@ -466,12 +482,14 @@ export default function ItemsList() {
       )}
 
       <BulkActionBar
+        disabled={busy || loading}
         allowedStatuses={allowedStatuses}
         count={selected.size}
         onApplyStatus={applyStatus}
         onPrintWork={printSelected}
         onClear={() => setSelected(new Set())}
       />
+      {printOpen && <WorkPrintDialog items={filtered} onClose={() => setPrintOpen(false)} />}
 
       {/* דיאלוג: כל הפריטים בהזמנה עודכנו → לקדם את ההזמנה? */}
       {syncQueue.length > 0 && (

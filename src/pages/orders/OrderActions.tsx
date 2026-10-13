@@ -1,4 +1,6 @@
 import { useNavigate } from 'react-router-dom'
+import { useState } from 'react'
+import WorkPrintDialog, { workPrintItems } from '../items/WorkPrintDialog'
 import { Printer, Wrench, MessageCircle, Pencil, Wallet, ClipboardList } from 'lucide-react'
 import { printOrder, buildFormFromOrder } from './printOrder'
 import { getSignatureDataUrl } from '../../lib/uploadSignature'
@@ -41,6 +43,7 @@ export interface ActionOrder {
     price: number
     for_execution: boolean
     item_status: string
+    production_version: number
     issue_kind?: string | null
     notes?: string
   }>
@@ -59,6 +62,7 @@ export default function OrderActions({
   order, compact = false, onPayment, onItemStatus,
 }: Props) {
   const navigate = useNavigate()
+  const [printOpen, setPrintOpen] = useState(false)
 
   const orderNum = order.order_number ?? 'טיוטה'
   const paid = (order.payments ?? []).reduce((s, p) => s + p.amount, 0)
@@ -114,12 +118,12 @@ ${paid > 0 ? `שולם: ${fmt(paid)}\nנשאר: ${fmt(remaining)}` : ''}
   const icon = 'w-[18px] h-[18px] text-brand'
 
   return (
-    <div className={compact ? 'flex items-center gap-0.5' : 'flex flex-wrap items-center gap-1 border-t pt-2 mt-2'}>
+    <><div className={compact ? 'flex items-center gap-0.5' : 'flex flex-wrap items-center gap-1 border-t pt-2 mt-2'}>
       <button className={btn} title="הדפס ללקוח" onClick={e => doPrint(e, true)}>
         <Printer className={icon} />{!compact && <span className="text-xs">הדפס</span>}
       </button>
 
-      <button className={btn} title="הוראות עבודה" onClick={e => doPrint(e, false)}>
+      <button className={btn} title="הוראות עבודה" onClick={e => { stop(e); setPrintOpen(true) }}>
         <Wrench className={icon} />{!compact && <span className="text-xs">עבודה</span>}
       </button>
 
@@ -145,5 +149,7 @@ ${paid > 0 ? `שולם: ${fmt(paid)}\nנשאר: ${fmt(remaining)}` : ''}
       )}
 
     </div>
+    {printOpen && <div onClick={event => event.stopPropagation()}><WorkPrintDialog items={workPrintItems(order.order_items ?? [], order)} onClose={() => setPrintOpen(false)} /></div>}
+    </>
   )
 }

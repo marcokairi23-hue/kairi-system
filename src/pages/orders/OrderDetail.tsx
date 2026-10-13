@@ -1,11 +1,10 @@
 import { useEffect, useState } from 'react'
-import { ArrowLeft, Printer, Wrench, MessageCircle, Pencil, ListChecks, CircleCheck, Square, PenLine, TriangleAlert, FileText, FileCheck, Send, Mail } from 'lucide-react'
+import { ArrowLeft, Printer, Wrench, MessageCircle, Pencil, CircleCheck, Square, PenLine, TriangleAlert, FileText, FileCheck, Send, Mail } from 'lucide-react'
 import { useParams, useNavigate } from 'react-router-dom'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/auth'
 import { printOrder, buildFormFromOrder } from './printOrder'
 import OrderActivityTab from './OrderActivityTab'
-import ItemSelectionDialog from './ItemSelectionDialog'
 import StatusSuggestionBanner from './StatusSuggestionBanner'
 import PaymentModal from './PaymentModal'
 import ItemIssueControl from './ItemIssueControl'
@@ -18,6 +17,8 @@ import {
   deriveV1OrderStatus, displayedOrderStatus,
 } from '../../lib/statusHelpers'
 import { recalculateOrderStatus } from '../../lib/recalculateOrderStatus'
+import WorkPrintDialog, { workPrintItems } from '../items/WorkPrintDialog'
+import { useItemDeepLink } from '../../lib/useItemDeepLink'
 import { refreshOrderPdf, generateCurrentOrderPdf, getUpdatedOrderPdfDisplayUrl, CUSTOMER_PDF_UPDATE_WARNING } from '../../lib/uploadOrderPdf'
 
 interface OrderItem {
@@ -96,6 +97,7 @@ export default function OrderDetail() {
   const [order, setOrder] = useState<Order | null>(null)
   const [pdfDisplayVersion, setPdfDisplayVersion] = useState(Date.now())
   const [loading, setLoading] = useState(true)
+  const [workPrintOpen, setWorkPrintOpen] = useState(false)
   const [signatureImgUrl, setSignatureImgUrl] = useState<string | null>(null)
   const [agentSignatureImgUrl, setAgentSignatureImgUrl] = useState<string | null>(null)
   const [updatingStatus, setUpdatingStatus] = useState(false)
@@ -107,8 +109,6 @@ export default function OrderDetail() {
   const [makeResult, setMakeResult] = useState<'ok' | 'error' | null>(null)
   const [syncingPdf, setSyncingPdf] = useState(false)
   const [syncError, setSyncError] = useState<string | null>(null)
-  const [officeSelectionOpen, setOfficeSelectionOpen] = useState(false)
-  const [showProductionSuggestion, setShowProductionSuggestion] = useState(false)
   const [installers, setInstallers] = useState<string[]>([])
   const [showInstallerSuggestion, setShowInstallerSuggestion] = useState(false)
   const [installCustomerSigOpen, setInstallCustomerSigOpen] = useState(false)
@@ -119,8 +119,8 @@ export default function OrderDetail() {
   const [showCompletedSuggestion, setShowCompletedSuggestion] = useState(false)
   const [reopenConfirmOpen, setReopenConfirmOpen] = useState(false)
   const [approverName, setApproverName] = useState<string | null>(null)
-  const [selectionError, setSelectionError] = useState<string | null>(null)
   const legacyUi = false
+  useItemDeepLink(!loading && !!order)
 
   const load = async () => {
     const { data } = await supabase
@@ -197,33 +197,6 @@ export default function OrderDetail() {
     })
     await load()
     setUpdatingStatus(false)
-  }
-
-  const confirmOfficeSelection = async (selectedIds: Set<string>) => {
-    if (updatingStatus) return
-    setUpdatingStatus(true); setSelectionError(null)
-    try {
-      const items = order.order_items ?? []
-      const results = await Promise.all(items.map(item =>
-        supabase.from('order_items')
-          .update({ for_execution: selectedIds.has(item.id) })
-          .eq('id', item.id)
-      ))
-      const failure = results.find(result => result.error)?.error
-      if (failure) throw failure
-      await recalculateOrderStatus(id!, profile?.id ?? null)
-      setOfficeSelectionOpen(false)
-      try {
-        await refreshOrderPdf(id!)
-      } catch {
-        setSyncError(CUSTOMER_PDF_UPDATE_WARNING)
-      }
-      await load()
-    } catch (err) {
-      setSelectionError('שגיאה בשמירת הבחירה: ' + (err instanceof Error ? err.message : String(err)))
-    } finally {
-      setUpdatingStatus(false)
-    }
   }
 
   const assignInstaller = async (name: string) => {
@@ -413,7 +386,7 @@ export default function OrderDetail() {
         >
           <Printer size={16} className="inline-block me-1" aria-hidden="true" /> {syncingPdf ? 'מפיק...' : 'הדפס'}
         </button>
-        <button className="btn-ghost text-sm" onClick={() => printOrder(form, orderNum, false)}>
+        <button className="btn-ghost text-sm" onClick={() => setWorkPrintOpen(true)}>
           <Wrench size={16} className="inline-block me-1" aria-hidden="true" /> הוראות עבודה
         </button>
         <button className="btn-ghost text-sm" onClick={sendWhatsApp}>
@@ -445,11 +418,7 @@ export default function OrderDetail() {
             סטטוס: <strong>{ORDER_STATUS_LABELS[order.status]}</strong>
           </div>
           <div className="flex gap-2">
-            {order.status === 'waiting_payment' ? (
-              <button className="btn-primary text-sm py-1.5" disabled={updatingStatus} onClick={() => setOfficeSelectionOpen(true)}>
-                <ListChecks size={16} className="inline-block me-1" aria-hidden="true" /> בחירה סופית
-              </button>
-            ) : legacyUi && order.status === 'ready_for_install' ? (
+            {legacyUi && order.status === 'ready_for_install' ? (
               <select
                 className="input text-sm py-1.5"
                 value={order.installer_name ?? ''}
@@ -463,7 +432,6 @@ export default function OrderDetail() {
         </div>
       )}
 
-      {selectionError && <p role="alert" className="text-red-600 text-sm mb-3">{selectionError}</p>}
       {hasIcreditReceipt && <div className="card p-3 mb-3 text-sm text-blue-900">
         תקבול iCredit אומת ונכלל ביתרה. שינוי סטטוס ההזמנה דורש החלטת עובד; אישור משרד לביצוע נשאר נפרד.
       </div>}
@@ -477,18 +445,6 @@ export default function OrderDetail() {
           />
         </div>}
       {legacyUi && <>
-      {showProductionSuggestion && order.status === 'pending_payment' && (
-        <div className="mb-3">
-          <StatusSuggestionBanner
-            orderId={id!}
-            currentStatus={order.status}
-            suggestedStatus="in_production"
-            reason="בחירה סופית בוצעה — להעביר לייצור?"
-            onApplied={() => { setShowProductionSuggestion(false); load() }}
-          />
-        </div>
-      )}
-
       {showInstallerSuggestion && order.status === 'ready_for_install' && (
         <div className="mb-3">
           <StatusSuggestionBanner
@@ -693,7 +649,7 @@ export default function OrderDetail() {
           <div className="bg-purple-600 text-white px-4 py-2 text-sm font-bold">וילונות ({curtains.length})</div>
           <div className="divide-y">
             {curtains.map((item, i) => (
-              <div key={item.id} className="p-3 text-sm">
+              <div key={item.id} id={`item-${item.id}`} tabIndex={-1} className="p-3 text-sm" style={{ scrollMarginTop:'4rem' }}>
                 <div className="flex justify-between items-start gap-2">
                   <span className="font-semibold">{i + 1}. {item.location}</span>
                   <div className="flex items-center gap-2 shrink-0">
@@ -730,7 +686,7 @@ export default function OrderDetail() {
           <div className="bg-orange-500 text-white px-4 py-2 text-sm font-bold">הצללה ({shadings.length})</div>
           <div className="divide-y">
             {shadings.map((item, i) => (
-              <div key={item.id} className="p-3 text-sm">
+              <div key={item.id} id={`item-${item.id}`} tabIndex={-1} className="p-3 text-sm" style={{ scrollMarginTop:'4rem' }}>
                 <div className="flex justify-between items-start gap-2">
                   <span className="font-semibold">
                     {i + 1}. {SHADING_LABELS[item.subtype ?? ''] ?? item.subtype} — {item.location}
@@ -819,17 +775,7 @@ export default function OrderDetail() {
         </div>
       )}
 
-      <ItemSelectionDialog
-        open={officeSelectionOpen}
-        items={(order.order_items ?? []).map(i => ({
-          id: i.id, family: i.family, location: i.location, subtype: i.subtype,
-          price: i.price, for_execution: i.for_execution,
-        }))}
-        orderTotal={order.final_total}
-        stage="office"
-        onConfirm={confirmOfficeSelection}
-        onClose={() => setOfficeSelectionOpen(false)}
-      />
+      {workPrintOpen && <WorkPrintDialog items={workPrintItems(order.order_items ?? [],order)} onClose={() => setWorkPrintOpen(false)} />}
     </div>
   )
 }

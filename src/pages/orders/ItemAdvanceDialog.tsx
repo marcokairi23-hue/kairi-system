@@ -1,106 +1,38 @@
-import { useEffect, useState } from 'react'
-import { supabase } from '../../lib/supabase'
+import { useEffect, useRef, useState } from 'react'
 import { useAuth } from '../../lib/auth'
-import { recalculateOrderStatus } from '../../lib/recalculateOrderStatus'
-import {
-  ITEM_STATUS_LABELS, resolveItemRoute, nextItemStatus, dateColumnForTransition,
-} from '../../lib/statusHelpers'
+import { advanceProductionItems } from '../../lib/productionActions'
+import { ProductionItem, productionNext } from '../../lib/productionPermissions'
+import { ITEM_STATUS_LABELS } from '../../lib/statusHelpers'
 
-interface AdvanceDialogItem {
-  id: string
-  order_id: string
-  family: string
-  location: string
-  production_route: 'internal' | 'external' | null
-  item_status: string
-  for_execution: boolean
-  assigned_worker: string | null
-}
+interface AdvanceDialogItem extends ProductionItem { location: string }
+interface Props { open: boolean; item: AdvanceDialogItem | null; onDone: () => void; onClose: () => void }
 
-interface ItemAdvanceDialogProps {
-  open: boolean
-  item: AdvanceDialogItem | null
-  onDone: () => void
-  onClose: () => void
-}
-
-interface Worker {
-  id: string
-  full_name: string
-}
-
-export default function ItemAdvanceDialog({ open, item, onDone, onClose }: ItemAdvanceDialogProps) {
+export default function ItemAdvanceDialog({ open, item, onDone, onClose }: Props) {
   const { profile } = useAuth()
-  const [workers, setWorkers] = useState<Worker[]>([])
-  const [selectedWorker, setSelectedWorker] = useState<string>('')
   const [saving, setSaving] = useState(false)
-
-  useEffect(() => {
-    if (open) {
-      supabase.from('profiles').select('id, full_name').order('full_name')
-        .then(({ data }) => setWorkers(data ?? []))
-      setSelectedWorker(item?.assigned_worker ?? '')
-    }
-  }, [open, item?.assigned_worker])
-
-  if (!open || !item || !item.id || !item.order_id || !item.for_execution) return null
-
-  const route = resolveItemRoute(item.production_route, item.family)
-  const next = nextItemStatus(route, item.item_status)
-
+  const [error, setError] = useState<string | null>(null)
+  const operationLock = useRef(false)
+  useEffect(() => { setError(null) },[open,item?.id])
+  if (!open || !item) return null
+  const next = productionNext(item,profile)
   const confirm = async () => {
-    if (!next) return
-    setSaving(true)
-
-    const dateColumn = dateColumnForTransition(item.item_status, next)
-    const updates: Record<string, unknown> = { item_status: next }
-    if (dateColumn) updates[dateColumn] = new Date().toISOString()
-    if (selectedWorker) updates.assigned_worker = selectedWorker
-
-    await supabase.from('order_items').update(updates).eq('id', item.id)
-
-    await supabase.from('order_status_history').insert({
-      order_id: item.order_id,
-      order_item_id: item.id,
-      from_status: item.item_status,
-      to_status: next,
-      changed_by: profile?.id ?? null,
-      note: 'קידום פריט',
-    })
-
-    await recalculateOrderStatus(item.order_id, profile?.id ?? null)
-    setSaving(false)
-    onDone()
+    if (!next || operationLock.current) return
+    operationLock.current = true; setSaving(true); setError(null)
+    try { await advanceProductionItems([item],next); onDone() }
+    catch (error) { setError('לא התקבל אישור לפעולה. יש לרענן. ' + (error as { message?: string }).message) }
+    finally { operationLock.current = false; setSaving(false) }
   }
-
-  return (
-    <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-4">
-      <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-xl">
-        <h3 className="font-bold text-lg mb-1 text-center">קידום פריט</h3>
-        <p className="text-sm text-slate-500 text-center mb-4">{item.location || 'ללא מיקום'}</p>
-
-        {next ? (
-          <p className="text-center mb-4">
-            מ-<strong>{ITEM_STATUS_LABELS[item.item_status] ?? item.item_status}</strong>
-            {' '}ל-<strong>{ITEM_STATUS_LABELS[next] ?? next}</strong>?
-          </p>
-        ) : (
-          <p className="text-center text-slate-400 mb-4">הפריט כבר בסוף המסלול</p>
-        )}
-
-        <label className="block text-xs font-medium text-slate-600 mb-1">שיוך עובד אחראי (אופציונלי)</label>
-        <select className="input mb-4" value={selectedWorker} onChange={e => setSelectedWorker(e.target.value)}>
-          <option value="">ללא שיוך</option>
-          {workers.map(w => <option key={w.id} value={w.id}>{w.full_name}</option>)}
-        </select>
-
-        <div className="flex gap-2">
-          <button className="btn-primary flex-1" disabled={!next || saving} onClick={confirm}>
-            {saving ? 'מעדכן...' : 'אישור'}
-          </button>
-          <button className="btn-ghost" onClick={onClose}>ביטול</button>
-        </div>
+  return <div className="fixed inset-0 bg-black/50 flex items-end sm:items-center justify-center z-50 p-4">
+    <div className="bg-white rounded-2xl p-6 w-full max-w-sm shadow-xl">
+      <h3 className="font-bold text-lg mb-1 text-center">קידום פריט</h3>
+      <p className="text-sm text-slate-500 text-center mb-4">{item.location || 'ללא מיקום'}</p>
+      {next ? <p className="text-center mb-4">מ־<strong>{ITEM_STATUS_LABELS[item.item_status]}</strong> ל־<strong>{ITEM_STATUS_LABELS[next]}</strong>?</p>
+        : <p className="text-center text-slate-500 mb-4">אין פעולה מורשית במצב הנוכחי</p>}
+      {error && <div role="alert" className="text-red-600 text-sm mb-3">{error}</div>}
+      <div className="flex gap-2">
+        <button className="btn-primary flex-1" disabled={!next || saving} onClick={confirm}>{saving ? 'מעדכן...' : 'אישור'}</button>
+        <button className="btn-ghost" disabled={saving} onClick={onClose}>ביטול</button>
       </div>
     </div>
-  )
+  </div>
 }
