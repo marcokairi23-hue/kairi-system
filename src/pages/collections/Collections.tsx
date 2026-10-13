@@ -3,6 +3,7 @@ import { CircleCheck, Wallet } from 'lucide-react'
 import { supabase } from '../../lib/supabase'
 import { useAuth } from '../../lib/auth'
 import { fmt } from '../../lib/statusHelpers'
+import CreditTransactions from './CreditTransactions'
 
 interface CollectionPayment {
   id: string
@@ -136,11 +137,26 @@ export default function Collections() {
   return (
     <div>
       <h1 className="text-2xl font-bold mb-4 flex items-center gap-2"><Wallet size={24} aria-hidden="true" /> גבייה</h1>
-      <div className="flex flex-wrap gap-2 mb-4">
-        {[['at_agent', 'אצל הסוכן'], ['received_office', 'התקבל במשרד'], ['all', 'הכל']].map(([value, label]) => (
-          <button key={value} disabled={busy} onClick={() => { setTab(value); setSelected(new Set()) }}
-                  className={`px-3 py-1.5 rounded-full text-sm font-medium ${tab === value ? 'bg-brand text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}`}>{label}</button>
-        ))}
+      <div className="mb-5 border-b border-slate-200 flex gap-2" aria-label="סוג גבייה">
+        {[['cash', 'מזומן וצ׳קים'], ...(canConfirm ? [['credit', 'עסקאות אשראי']] : [])].map(([value, label]) => {
+          const active = value === 'credit' ? tab === 'credit' : tab !== 'credit'
+          return <button key={value} disabled={busy} aria-pressed={active}
+            onClick={() => { setTab(value === 'credit' ? 'credit' : 'at_agent'); setSelected(new Set()) }}
+            className={`px-4 py-3 text-base font-bold border-b-2 -mb-px ${active ? 'border-brand text-brand' : 'border-transparent text-slate-500 hover:text-slate-700'}`}>
+            {label}
+          </button>
+        })}
+      </div>
+      {tab === 'credit' ? <CreditTransactions /> : <>
+      <div className="mb-4 rounded-xl bg-slate-50 border border-slate-200 p-3">
+        <p className="text-xs font-semibold text-slate-500 mb-2">מצב העברת התקבול למשרד</p>
+        <div className="flex flex-wrap gap-2">
+          {[['at_agent', 'אצל הסוכן'], ['received_office', 'התקבל במשרד'], ['all', 'כל התקבולים']].map(([value, label]) => (
+            <button key={value} disabled={busy} aria-pressed={tab === value}
+              onClick={() => { setTab(value); setSelected(new Set()) }}
+              className={`px-3 py-1.5 rounded-full text-sm font-medium ${tab === value ? 'bg-brand text-white' : 'bg-white border border-slate-200 text-slate-600 hover:bg-slate-50'}`}>{label}</button>
+          ))}
+        </div>
       </div>
       <div className="flex flex-wrap gap-3 mb-4">
         <label className="text-sm space-y-1">
@@ -206,6 +222,7 @@ export default function Collections() {
           </div>
         })}</div>
       </section>}
+      </>}
     </div>
   )
 }
